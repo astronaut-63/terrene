@@ -77,7 +77,10 @@ export function EarthGlobe(props: EarthGlobeProps) {
 
       const token = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
       const imageryId = Number(import.meta.env.VITE_CESIUM_ION_IMAGERY_ASSET_ID);
-      if (token) cleanups.push(attachSearch(v, token, () => fail('GEOCODER_FAILED', 'Location search is unavailable.')));
+      if (token) {
+        try { cleanups.push(attachSearch(v, token, () => fail('GEOCODER_FAILED', 'Location search is unavailable. Check geocode permission and network access.'))); }
+        catch { fail('GEOCODER_FAILED', 'Location search could not initialize; globe navigation remains available.'); }
+      }
       else fail('ION_UNCONFIGURED', 'Using bundled Natural Earth imagery and ellipsoid terrain. Ion search and terrain require a token.');
 
       void (async () => {
@@ -88,7 +91,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
           v.imageryLayers.addImageryProvider(fallback);
         } catch { fail('FALLBACK_IMAGERY_FAILED', 'Bundled imagery is unavailable; check Cesium static asset hosting.'); }
         if (disposed) return;
-        if (token && Number.isInteger(imageryId) && imageryId > 0) {
+        if (token && Number.isSafeInteger(imageryId) && imageryId > 0) {
           try {
             const imagery = await IonImageryProvider.fromAssetId(imageryId, { accessToken: token });
             if (disposed) return;
@@ -114,7 +117,17 @@ export function EarthGlobe(props: EarthGlobeProps) {
             }));
           } catch { fail('TERRAIN_FAILED', 'World Terrain is unavailable; using the WGS84 ellipsoid.'); }
         }
-        if (!disposed && !broken) { v.scene.requestRender(); status(degraded ? 'degraded' : 'ready'); }
+        if (!disposed && !broken) {
+          // Provider metadata alone does not establish that visible tiles loaded.
+          let reported = false;
+          cleanups.push(v.scene.postRender.addEventListener(() => {
+            if (!reported && !disposed && !broken && v.scene.globe.tilesLoaded) {
+              reported = true;
+              status(degraded ? 'degraded' : 'ready');
+            }
+          }));
+          v.scene.requestRender();
+        }
       })();
     } catch {
       broken = true;
