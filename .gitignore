@@ -6,3 +6,6 @@ public/cesium/
 .env
 .env.local
 .env.*.local
+__pycache__/
+*.db
+.venv/

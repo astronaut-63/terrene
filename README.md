@@ -1,5 +1,7 @@
 # Terrene
 
+Backend migration in progress: Vite now proxies all `/api` requests to FastAPI on port 3002. Start `python -m uvicorn backend.main:app --port 3002` after installing `backend/requirements-dev.txt` and running `python -m alembic upgrade head`. Set `HEIGIT_API_KEY` in the backend environment for route calculation. The older Node startup instructions below are retained as historical documentation; Node is no longer required by the current proxy. See [implementation status and current setup](IMPLEMENTATION_STATUS.md) for the exact completed scope and outstanding work.
+
 Terrene is a time-aware geographical exploration platform. The primary application at `/` integrates the shell with the Cesium Earth engine through `src/globe`. Run `npm ci` then `npm run dev` and open the URL printed by Vite. `/earth-demo.html` remains available as an isolated engine demonstration.
 
 The application now has two coordinated mapping modes. **2D Map** is the default tourist exploration view powered by MapLibre GL JS and the configurable OpenFreeMap Liberty vector style. **3D Globe** lazy-loads the existing Cesium Earth experience for terrain, geographical context and solar exploration. Search, selected places, saved places, route geometry and the two camera states are application-owned and persist when switching modes. See [the mapping architecture](docs/MAPPING_ARCHITECTURE.md).
