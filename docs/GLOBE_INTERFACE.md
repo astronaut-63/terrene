@@ -2,6 +2,8 @@
 
 `src/globe` is Terrene's public boundary for the application shell. Consumers must import its types and functions from `src/globe`, and must not import Cesium classes.
 
+The main application lazy-loads `EarthGlobe` only for the 3D mode. The default 2D renderer lives in `src/map/MapView.tsx`; renderer-independent search lives in `src/services/locationSearch.ts`, and shared geographic/session types live in `src/domain/geo.ts`.
+
 ## Coordinates and camera
 
 `GeoCoordinates` uses WGS84 latitude and longitude in decimal degrees. Latitude is in `[-90, 90]`; longitude is conventionally in `[-180, 180]`. `heightMeters` is optional metres above the WGS84 ellipsoid. `GlobeCamera.rangeMeters` is metres; heading and pitch are decimal degrees.

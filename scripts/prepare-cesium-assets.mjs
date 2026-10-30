@@ -16,3 +16,6 @@ await rm(destination, { recursive: true, force: true });
 for (const directory of ['Assets', 'Workers', 'ThirdParty', 'Widgets']) {
   await cp(resolve(source, directory), resolve(destination, directory), { recursive: true });
 }
+
+// Keep MapLibre's worker at a stable public URL for both Vite dev and production.
+await cp(resolve("node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs"), resolve("public/maplibre-gl-worker.mjs"));
