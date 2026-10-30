@@ -45,6 +45,17 @@ export const searchLocations: LocationSearch = async (query, signal) => {
   const term = searchTerm(query);
   if (!term) return [];
   const provider = Array.from(providers.values()).at(-1);
-  if (!provider) throw new Error('Location search requires a mounted EarthGlobe and VITE_CESIUM_ION_TOKEN with geocode permission.');
-  return provider(term, signal);
+  if (provider) return provider(term, signal);
+  let response: Response;
+  try {
+    response = await fetch(`/api/locations/search?q=${encodeURIComponent(term)}`, { signal, headers: { Accept: 'application/json' } });
+  } catch {
+    if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
+    throw new Error('Location search backend is unavailable. Start the Node backend or configure a Cesium ion token.');
+  }
+  let body: { results?: GeographicLocation[]; error?: string };
+  try { body = await response.json(); } catch { throw new Error('Location search returned invalid data.'); }
+  if (!response.ok) throw new Error(body.error ?? 'Location search failed.');
+  if (!Array.isArray(body.results)) throw new Error('Location search returned invalid data.');
+  return body.results;
 };

@@ -47,7 +47,8 @@ it.each([undefined, '', '   '])('keeps fallback and reports absent token %s', as
   expect(mock.imagery).not.toHaveBeenCalled(); expect(mock.resource).not.toHaveBeenCalled();
   expect(mock.viewers[0].terrainProvider).toBeInstanceOf(EllipsoidTerrainProvider);
   expect(error).toHaveBeenCalledWith(expect.objectContaining({ code: 'ION_UNCONFIGURED' }));
-  await expect(searchLocations('Paris')).rejects.toThrow('requires');
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ results: [{ id: 'paris', name: 'Paris', coordinates: { latitude: 48.85, longitude: 2.35 } }] }), { status: 200, headers: { 'content-type': 'application/json' } })));
+  await expect(searchLocations('Paris')).resolves.toHaveLength(1);
 });
 it('waits for visible tile loading and never treats provider metadata as ready', async () => {
   const status = vi.fn(); render(<EarthGlobe onStatusChange={status} />);
