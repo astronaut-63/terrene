@@ -1,6 +1,10 @@
 # Terrene
 
-Terrene is a time-aware geographical exploration platform. The Cesium Earth engine is exported from `src/globe`. The application shell PR remains separate; open `/earth-demo.html` for a working engine demonstration.
+Terrene is a time-aware geographical exploration platform. The primary application at `/` integrates the shell with the Cesium Earth engine through `src/globe`. Run `npm ci` then `npm run dev` and open the URL printed by Vite. `/earth-demo.html` remains available as an isolated engine demonstration.
+
+For a credential-free demonstration, choose Everest, Grand Canyon or Cape Town from the explicitly labeled example destinations. The camera flies to a regional view. Click the globe to inspect coordinates, add a marker, select it from the list or globe, and remove it. Examples are fixed geographical destinations, not fabricated search results. Search failures and degraded engine status remain visible.
+
+Integration verification: `npm test` runs 5 engine logic tests plus 4 shell integration tests (the shell tests mock the globe boundary, not WebGL). `npm run typecheck` and `npm run build` pass. Chrome testing of `/` verified globe rendering, example flights, coordinate display, marker creation and unavailable search. Ion imagery, terrain and live geocoding still require configured credentials and are unverified. Installation reports 3 advisories in inherited development tooling; `npm audit --omit=dev --audit-level=moderate` reports zero runtime vulnerabilities. No force upgrade was applied.
 
 ## Requirements
 

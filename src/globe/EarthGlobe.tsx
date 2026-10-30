@@ -156,7 +156,8 @@ export function EarthGlobe(props: EarthGlobeProps) {
       latest.current.onError?.({ code: 'INVALID_LOCATION', message: 'Selected location has invalid coordinates.' });
       return;
     }
-    aim(viewer, { center: location.coordinates, rangeMeters: 100_000 }, true);
+    const detailedImageryConfigured = !!import.meta.env.VITE_CESIUM_ION_TOKEN?.trim() && Number(import.meta.env.VITE_CESIUM_ION_IMAGERY_ASSET_ID) > 0;
+    aim(viewer, { center: location.coordinates, rangeMeters: detailedImageryConfigured ? 100_000 : 2_500_000 }, true);
     latest.current.onLocationSelected?.(location);
   }, [viewer, props.selectedLocation]);
 

@@ -8,6 +8,8 @@
 
 ## Controlled inputs
 
+Integration update: selected-location flights now use a 2,500 km regional range when ion detailed imagery is not configured, so bundled imagery remains useful. The 100 km range described below applies when a token and imagery asset ID are supplied. No public type signatures changed.
+
 `selectedLocation` is nullable: `null` cancels an active flight without moving the camera. A valid location triggers a 1.5-second flight at 100 km range. Keep its object identity stable when unchanged. `initialCamera` applies only on mount; default heading is 0 degrees, pitch -60 degrees and range 10,000 km. Explicit pitch must be between -90 and 0; range must be positive. With no camera supplied, a global view is used.
 
 `markers` is controlled by the application; supply a new array after changes. Removed markers are removed from Cesium. First valid occurrence of each ID wins; invalid coordinates and duplicate IDs report `INVALID_MARKERS`. Omitted height clamps markers to available terrain; supplied height is absolute ellipsoid height. The globe owns rendered entities, not application marker state.
