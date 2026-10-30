@@ -16,7 +16,7 @@ Integration update: selected-location flights now use a 2,500 km regional range 
 
 ## Events and state
 
-`onCoordinatesSelected` emits a valid WGS84 point after a globe click using a ray against loaded terrain with an ellipsoid fallback; sky clicks emit nothing. Heights reflect currently loaded terrain accuracy. Marker clicks emit only `onMarkerSelected(id)`. `onLocationSelected` acknowledges acceptance of a valid selectedLocation prop, not arrival or reverse geocoding. Do not create a fresh selection object inside this callback. `onStatusChange` reports initialization, configured provider readiness, fallback degradation, or fatal failure; ready does not promise all future tiles or search requests will succeed. Runtime provider errors can degrade readiness. Degradation is sticky for the mount. `onError` receives `{code,message}`; invalid inputs do not make the renderer unusable. Error codes include `INITIALIZATION_FAILED`, `RENDER_ERROR`, `INVALID_CAMERA`, `INVALID_LOCATION`, `INVALID_MARKERS`, `ION_UNCONFIGURED`, `ION_IMAGERY_UNCONFIGURED`, `ION_IMAGERY_FAILED`, `FALLBACK_IMAGERY_FAILED`, `TERRAIN_FAILED`, and `GEOCODER_FAILED`.
+`onCoordinatesSelected` emits a valid WGS84 point after a globe click using a ray against loaded terrain with an ellipsoid fallback; sky clicks emit nothing. Heights reflect currently loaded terrain accuracy. Marker clicks emit only `onMarkerSelected(id)`. `onLocationSelected` acknowledges acceptance of a valid selectedLocation prop, not arrival or reverse geocoding. Do not create a fresh selection object inside this callback. `onStatusChange` reports initialization, visible-tile readiness after provider setup, fallback degradation, or fatal failure; ready waits for the current globe tile queue to finish after provider setup; it does not verify geocoding, geographic coverage, visual quality, or promise all future requests will succeed. Runtime provider errors can degrade readiness. Degradation is sticky for the mount. `onError` receives `{code,message}`; invalid inputs do not make the renderer unusable. Error codes include `INITIALIZATION_FAILED`, `RENDER_ERROR`, `INVALID_CAMERA`, `INVALID_LOCATION`, `INVALID_MARKERS`, `ION_UNCONFIGURED`, `ION_IMAGERY_UNCONFIGURED`, `ION_IMAGERY_FAILED`, `FALLBACK_IMAGERY_FAILED`, `TERRAIN_FAILED`, and `GEOCODER_FAILED`.
 
 ## Search
 
@@ -39,3 +39,13 @@ import { EarthGlobe, searchLocations } from './globe';
 ```
 
 Callbacks can change without recreating the Viewer. Unmount removes event handlers, resize observers, geocoder registrations and GPU resources. React StrictMode mounts are supported. `src/globe/demo.tsx` is a standalone example, not the application shell.
+
+
+Provider reliability update: geocoder construction errors report `GEOCODER_FAILED`
+without stopping the renderer or imagery/terrain setup. Imagery tile errors hide the
+hosted layer, exposing bundled imagery; terrain tile errors restore an ellipsoid.
+Degradation remains sticky until remount/reload. Search failures can be retried by
+submitting again. Unmount discards pending search responses before credit or render
+updates. Cancellation observes late rejected provider promises without unhandled
+rejections. Imagery asset IDs must be positive safe integers. Public types and
+callback signatures are unchanged; no shell or styling changes were required.

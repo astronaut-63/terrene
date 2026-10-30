@@ -7,13 +7,16 @@ const providers = new Map<symbol, LocationSearch>();
 
 export function attachSearch(viewer: Viewer, token: string, failed: () => void) {
   const key = Symbol();
+  let disposed = false;
   const service = new IonGeocoderService({ scene: viewer.scene, accessToken: token });
   providers.set(key, async (query, signal) => {
     try {
       const results = await abortable(service.geocode(query), signal);
-      if (viewer.isDestroyed()) throw new Error('Globe was closed during search.');
+      if (disposed || viewer.isDestroyed()) throw new DOMException('Search cancelled', 'AbortError');
+      if (!Array.isArray(results)) throw new Error('Invalid geocoder response.');
       const locations: GeographicLocation[] = [];
       for (const result of results) {
+        if (!result || typeof result.displayName !== 'string' || !result.displayName.trim()) continue;
         for (const credit of GeocoderService.getCreditsFromResult(result) ?? []) {
           viewer.cesiumWidget.creditDisplay.addStaticCredit(credit);
         }
@@ -29,12 +32,12 @@ export function attachSearch(viewer: Viewer, token: string, failed: () => void) 
       viewer.scene.requestRender();
       return locations;
     } catch (error) {
-      if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
+      if (disposed || signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
       failed();
       throw new Error('Cesium ion location search failed. Check token geocode permissions and network access.');
     }
   });
-  return () => { providers.delete(key); };
+  return () => { disposed = true; providers.delete(key); };
 }
 
 export const searchLocations: LocationSearch = async (query, signal) => {

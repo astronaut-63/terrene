@@ -14,8 +14,8 @@ Integration verification: `npm test` runs 5 engine logic tests plus 4 shell inte
 ## Setup
 
 ```sh
-npm install
-cp .env.example .env
+npm ci
+cp .env.example .env.local
 npm run dev
 ```
 
@@ -42,3 +42,55 @@ Application code imports public globe types and `searchLocations` from `src/glob
 Search uses the installed Cesium 1.146.0 `IonGeocoderService` and requires a mounted `EarthGlobe` with a token. No-token search rejects explicitly. The demo supports click-to-place a marker and explicit search submission. Native Cesium controls provide left-drag rotation, wheel/right-drag zoom, and middle-drag tilt. The production demo is also available after `npm run build` and `npm run preview`.
 
 Verified locally: `npm test` (5 tests), `npm run typecheck`, and `npm run build`. Browser smoke testing verified no-token imagery, rotation/zoom, coordinate picking and marker selection. Configured ion imagery/terrain/search are not verified without credentials. Cesium currently produces a large (~4.23 MB, ~1.14 MB gzip) JS chunk; this is a build warning, not a failure.
+
+
+## T1-ASTRA-02 provider verification (31 October 2026)
+
+Work is isolated on `feat/cesium-provider-verification` from integration commit
+`1d16fe125d23efbdbeeda6cf796647f5c02d0ca3`; unrelated uncommitted backend work is untouched.
+CesiumJS 1.146.0 APIs were checked against installed source. No local token was
+available: **hosted imagery BLOCKED, World Terrain BLOCKED, live search BLOCKED**.
+The earlier verification notes above are historical, not evidence of live providers.
+
+Use a Cesium ion account, add the desired imagery and World Terrain to its assets,
+and create a dedicated public application token. Set `VITE_CESIUM_ION_TOKEN` and
+`VITE_CESIUM_ION_IMAGERY_ASSET_ID` in ignored `.env.local`. Grant `assets:read` for
+asset 1 and the selected imagery asset, plus `geocode` for search. Restrict Allowed
+URLs to the actual development origin (including port) and deployment URL; the
+browser must send the Referer header for restricted tokens. Do not use private
+scopes. See [Cesium's token guide](https://cesium.com/learn/ion/cesium-ion-access-tokens/).
+The token is publicly observable in the browser and production bundle.
+
+Provider sources remain unchanged: account-selected `IonImageryProvider`,
+World Terrain asset 1, and `IonGeocoderService` using ion's default geocoding
+provider. Resolution, coverage, upstream geocoder selection, licensing and quotas
+depend on the selected data and account. Natural Earth II is only a low-resolution
+bundled map; its shaded relief does not establish loaded elevation.
+
+`npm test` passes 27 tests (6 logic, 17 provider, 4 shell), preserving all original
+nine tests. `npm run typecheck` and `npm run build` exit 0.
+Automated tests use mocked providers and real Cesium coordinate conversion classes;
+they cannot establish remote authentication, tile content or visual elevation.
+Chrome verified no-token regional imagery, Everest/Cape Town example selection,
+marker creation/removal, coordinate picking and honest unavailable search. Hosted-service 401/403,
+network and rate-limit cases were simulated, not verified against a live account.
+A reload remounts failed imagery/terrain; search can be resubmitted after failure.
+There is no automatic provider retry loop.
+
+Before accepting the full milestone, run the configured app and record successful
+remote requests plus visible imagery at continental, metropolitan, coastal and
+other-region zoom levels; inspect tilted mountainous and flat terrain; search a
+city, country and distant region and select results to verify displayed coordinates
+and flights. Repeat with revoked/restricted credentials and network outages. Keep
+request URLs containing tokens out of logs, screenshots and reports.
+
+The production build still has one shared EarthGlobe chunk (~4.46 MB, ~1.21 MB gzip).
+Both entry points share it; it is not duplicated per page. Asset preparation now
+copies only Assets, Workers, ThirdParty and Widgets, excluding the unused standalone
+Cesium.js bundle. Broader code splitting remains a separate performance task.
+`npm audit` reports three affected development packages (one moderate, two critical):
+direct Vitest 3.2.4 and transitive @vitest/mocker and tinypool. Reported issues include
+mock-server path traversal/injection and worker-option prototype pollution.
+`npm audit --omit=dev --audit-level=moderate` reports zero vulnerabilities. Review
+patched tooling and validate its dependency tree in a separate update; no mass
+upgrade was applied here.
