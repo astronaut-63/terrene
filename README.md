@@ -2,6 +2,8 @@
 
 Terrene is a time-aware geographical exploration platform. The primary application at `/` integrates the shell with the Cesium Earth engine through `src/globe`. Run `npm ci` then `npm run dev` and open the URL printed by Vite. `/earth-demo.html` remains available as an isolated engine demonstration.
 
+The application now has two coordinated mapping modes. **2D Map** is the default tourist exploration view powered by MapLibre GL JS and the configurable OpenFreeMap Liberty vector style. **3D Globe** lazy-loads the existing Cesium Earth experience for terrain, geographical context and solar exploration. Search, selected places, saved places, route geometry and the two camera states are application-owned and persist when switching modes. See [the mapping architecture](docs/MAPPING_ARCHITECTURE.md).
+
 For a credential-free demonstration, choose Everest, Grand Canyon or Cape Town from the explicitly labeled example destinations. The camera flies to a regional view. Click the globe to inspect coordinates, add a marker, select it from the list or globe, and remove it. Examples are fixed geographical destinations, not fabricated search results. Search failures and degraded engine status remain visible.
 
 ## Backend API
@@ -15,7 +17,7 @@ python -m pip install -r backend\requirements.txt
 python -m uvicorn backend.solar_api:app --reload --port 3002
 ```
 
-In another terminal, run `npm run dev:backend` to keep the existing geocoder available on port 3001, then run `npm run dev` in a third terminal. FastAPI's independent interactive docs are available at `http://localhost:3002/docs`.
+In another terminal, run `npm run dev:backend` to keep the current checkout's geocoder available on port 3001, then run `npm run dev` in a third terminal. `npm run dev` does not start either backend. If port 3001 is already occupied by an older `node dist-server/server.js`, stop that stale process and restart `npm run dev:backend` from this checkout. FastAPI's independent interactive docs are available at `http://localhost:3002/docs`.
 
 `GET /api/solar?lat=19.076&lon=72.878&date=2026-11-01` returns UTC sunrise, sunset, solar noon, day length, and solar position. It uses the NOAA solar equations with the standard 90.833° sunrise/sunset zenith; results are approximate (usually within a few minutes), and terrain, weather, and civil-time rules are not modeled. Polar day/night returns null sunrise and sunset rather than invented values.
 
@@ -32,7 +34,7 @@ Endpoints:
 - `GET /api/locations/search?q=Delhi` → `{ "results": [{ "id", "name", "displayName", "coordinates", "metadata" }] }`
 - `GET /api/solar?lat=19.076&lon=72.878&date=2026-11-01` → use the FastAPI service on port 3002 described above.
 
-Nominatim is a shared service: use it respectfully and retain OpenStreetMap attribution in deployments. The local runtime smoke request could not be completed in the restricted environment because localhost socket access is blocked; mocked provider behavior is covered by tests.
+Nominatim is a shared service: use it respectfully and retain OpenStreetMap attribution in deployments. The frontend expects the typed `{ results: GeographicLocation[] }` response shown above; it does not send queries to the MapLibre/OpenFreeMap style service.
 
 Integration verification: `npm test` runs 5 engine logic tests plus 4 shell integration tests (the shell tests mock the globe boundary, not WebGL). `npm run typecheck` and `npm run build` pass. Chrome testing of `/` verified globe rendering, example flights, coordinate display, marker creation and unavailable search. Ion imagery, terrain and live geocoding still require configured credentials and are unverified. Installation reports 3 advisories in inherited development tooling; `npm audit --omit=dev --audit-level=moderate` reports zero runtime vulnerabilities. No force upgrade was applied.
 
@@ -40,6 +42,8 @@ Integration verification: `npm test` runs 5 engine logic tests plus 4 shell inte
 
 - Node.js 24 recommended (the native TypeScript tests require Node 22.18+)
 - npm 10+
+
+The 2D map uses the public OpenFreeMap Liberty style by default. It is a vector map service for development and demos, not an unrestricted production tile guarantee; review its availability, attribution, usage limits and terms before deployment. Override it with `VITE_MAP_STYLE_URL` when using another compatible style or a self-hosted provider.
 
 ## Setup
 

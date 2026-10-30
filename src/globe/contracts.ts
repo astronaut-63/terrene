@@ -1,16 +1,7 @@
-/** WGS84 geographic position: decimal degrees; height is metres above the ellipsoid. */
-export interface GeoCoordinates {
-  latitude: number;
-  longitude: number;
-  heightMeters?: number;
-}
+import type { GeoCoordinates, Place, RouteGeoJSON } from '../domain/geo';
 
-export interface GeographicLocation {
-  id: string;
-  name: string;
-  displayName?: string;
-  coordinates: GeoCoordinates;
-}
+export type { GeoCoordinates, MapCamera2D, MapCamera3D, MapMode, Place, RouteGeoJSON } from '../domain/geo';
+export type GeographicLocation = Place;
 
 export interface GlobeMarker {
   id: string;
@@ -38,6 +29,8 @@ export interface EarthGlobeProps {
   initialCamera?: GlobeCamera;
   selectedLocation?: GeographicLocation | null;
   markers?: GlobeMarker[];
+  routeGeoJSON?: RouteGeoJSON | null;
+  onCameraChange?: (camera: GlobeCamera) => void;
   onCoordinatesSelected?: (coordinates: GeoCoordinates) => void;
   onLocationSelected?: (location: GeographicLocation) => void;
   onMarkerSelected?: (markerId: string) => void;

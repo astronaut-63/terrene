@@ -76,6 +76,18 @@ export function EarthGlobe(props: EarthGlobeProps) {
       const resize = new ResizeObserver(() => { if (!disposed) { v.resize(); v.scene.requestRender(); } });
       resize.observe(container.current!);
       cleanups.push(() => resize.disconnect());
+      const reportCamera = () => {
+        if (v.isDestroyed()) return;
+        const cartographic = Cartographic.fromCartesian(v.camera.positionWC);
+        latest.current.onCameraChange?.({
+          center: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude), heightMeters: cartographic.height },
+          rangeMeters: Math.max(1, cartographic.height),
+          headingDegrees: CesiumMath.toDegrees(v.camera.heading),
+          pitchDegrees: CesiumMath.toDegrees(v.camera.pitch),
+        });
+      };
+      const cameraChanged = (v.camera as Viewer['camera'] & { changed?: { addEventListener: (listener: () => void) => () => void } }).changed;
+      if (cameraChanged) cleanups.push(cameraChanged.addEventListener(reportCamera));
 
       const token = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
       const imageryId = Number(import.meta.env.VITE_CESIUM_ION_IMAGERY_ASSET_ID);
@@ -164,11 +176,25 @@ export function EarthGlobe(props: EarthGlobeProps) {
       status('error');
     }
     return () => {
+      if (instance && !instance.isDestroyed() && instance.camera.positionWC) {
+        const cartographic = Cartographic.fromCartesian(instance.camera.positionWC);
+        latest.current.onCameraChange?.({ center: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude), heightMeters: cartographic.height }, rangeMeters: Math.max(1, cartographic.height), headingDegrees: CesiumMath.toDegrees(instance.camera.heading), pitchDegrees: CesiumMath.toDegrees(instance.camera.pitch) });
+      }
       disposed = true;
       cleanups.reverse().forEach(cleanup => cleanup());
       if (instance && !instance.isDestroyed()) instance.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    viewer.entities.removeById('route');
+    const coordinates = props.routeGeoJSON?.coordinates;
+    if (coordinates && coordinates.length >= 2) {
+      viewer.entities.add({ id: 'route', polyline: { positions: Cartesian3.fromDegreesArray(coordinates.flat()), width: 4, material: Color.ORANGE } });
+    }
+    viewer.scene.requestRender();
+  }, [viewer, props.routeGeoJSON]);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
