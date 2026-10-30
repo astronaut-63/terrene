@@ -11,6 +11,7 @@
     "dev": "npm run prepare:cesium && vite",
     "build": "npm run prepare:cesium && tsc -b && vite build",
     "typecheck": "tsc -b",
+    "test": "node --test tests/*.test.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
