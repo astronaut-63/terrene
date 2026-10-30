@@ -30,3 +30,10 @@ test('provider success, empty results and failures propagate', async () => {
   assert.deepEqual(await abortable(Promise.resolve([])), []);
   await assert.rejects(abortable(Promise.reject(new Error('provider failed'))), /provider failed/);
 });
+
+test('already cancelled requests still observe a rejecting provider promise', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(abortable(Promise.reject(new Error('late failure')), controller.signal), {name: 'AbortError'});
+  await new Promise(resolve => setImmediate(resolve));
+});

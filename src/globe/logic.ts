@@ -29,9 +29,11 @@ export function searchTerm(query: string): string {
 
 export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
-    const abort = () => reject(new DOMException('Search cancelled', 'AbortError'));
-    if (signal?.aborted) { abort(); return; }
-    signal?.addEventListener('abort', abort, { once: true });
-    promise.then(resolve, reject).finally(() => signal?.removeEventListener('abort', abort));
+    const cleanup = () => signal?.removeEventListener('abort', abort);
+    const abort = () => { cleanup(); reject(new DOMException('Search cancelled', 'AbortError')); };
+    // Always observe the provider promise, even if cancellation already happened.
+    promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+    if (signal?.aborted) abort();
+    else signal?.addEventListener('abort', abort, { once: true });
   });
 }

@@ -12,4 +12,7 @@ try {
 
 await mkdir(resolve("public"), { recursive: true });
 await rm(destination, { recursive: true, force: true });
-await cp(source, destination, { recursive: true });
+// The application bundles Cesium as ESM; do not ship its unused standalone JS bundle.
+for (const directory of ['Assets', 'Workers', 'ThirdParty', 'Widgets']) {
+  await cp(resolve(source, directory), resolve(destination, directory), { recursive: true });
+}
