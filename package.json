@@ -9,10 +9,13 @@
   "scripts": {
     "prepare:cesium": "node scripts/prepare-cesium-assets.mjs",
     "dev": "npm run prepare:cesium && vite",
-    "test": "node --test tests/*.test.mjs && vitest run",
+    "dev:backend": "npm run build:backend && node dist-server/server.js",
+    "build:backend": "tsc -p tsconfig.server.json",
+    "test": "npm run build:backend && node --test tests/*.test.mjs && vitest run",
     "build": "npm run prepare:cesium && tsc -b && vite build",
     "typecheck": "tsc -b",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start:backend": "node dist-server/server.js"
   },
   "dependencies": {
     "@cesium/engine": "22.3.0",

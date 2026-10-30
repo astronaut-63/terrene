@@ -6,9 +6,9 @@
 .exploration { display: grid; grid-template-columns: 320px minmax(0, 1fr); grid-template-rows: auto auto 1fr; gap: 16px; align-items: start; }
 .globe-stage { display: block; grid-column: 2; grid-row: 1 / 4; width: 100%; height: calc(100vh - 112px); min-height: 580px; position: sticky; top: 24px; }
 .panel { position: relative; inset: auto; width: 100%; margin: 0; grid-column: 1; }
-.search-panel { grid-row: 1; }.location-panel { grid-row: 2; }.marker-panel { grid-row: 3; }
+.search-panel { grid-row: 1; }.location-panel { grid-row: 2; }.marker-panel { grid-row: 3; }.solar-panel { grid-row: 4; }
 .example-title { margin-top: 20px; }.example-buttons { display: flex; flex-wrap: wrap; gap: 6px; }.example-buttons button { font-size: .78rem; padding: 7px 9px; }
 .engine-message { border-top: 1px solid #31483b; padding-top: 12px; color: #e4c98e; }
-.results, .markers { max-height: 220px; overflow: auto; }
+.results, .markers { max-height: 220px; overflow: auto; }.solar-results { margin-top: 16px; }.solar-results dd { font-variant-numeric: tabular-nums; }
 @media (max-width: 840px) { .exploration { display: flex; flex-direction: column; padding: 12px; }.globe-stage { order: 0; position: relative; top: auto; height: 60vh; min-height: 390px; }.panel { margin: 0; }.search-panel { order: 1; }.location-panel { order: 2; }.marker-panel { order: 3; }.topbar { gap: 14px; }.status-pill { max-width: 180px; } }
 @media (max-width: 480px) { .topbar { padding: 0 16px; }.status-pill { font-size: .7rem; }.exploration { padding: 8px; }.panel { padding: 16px; } }

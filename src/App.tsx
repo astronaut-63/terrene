@@ -7,6 +7,7 @@ const examples: GeographicLocation[] = [
   { id: 'example-cape-town', name: 'Cape Town', displayName: 'South Africa · example destination', coordinates: { latitude: -33.9249, longitude: 18.4241 } },
 ];
 type SearchState = 'idle' | 'loading' | 'success' | 'empty' | 'error';
+type SolarResult = { sunrise_utc: string | null; sunset_utc: string | null; solar_noon_utc: string; day_length_seconds: number | null; condition?: string; solar_elevation_degrees: number | null; solar_azimuth_degrees: number | null };
 const coordinatesText = (c: GeoCoordinates) => `${c.latitude.toFixed(4)}° latitude, ${c.longitude.toFixed(4)}° longitude`;
 const statusLabel: Record<GlobeStatus, string> = { initializing: 'Initialising globe', ready: 'Globe ready', degraded: 'Globe running with limited resources', error: 'Globe unavailable' };
 
@@ -22,6 +23,10 @@ export function App() {
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [globeStatus, setGlobeStatus] = useState<GlobeStatus>('initializing');
   const [globeError, setGlobeError] = useState<GlobeError | null>(null);
+  const [solarDate, setSolarDate] = useState('2026-11-01');
+  const [solarResult, setSolarResult] = useState<SolarResult | null>(null);
+  const [solarState, setSolarState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [solarError, setSolarError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   useEffect(() => () => controllerRef.current?.abort(), []);
 
@@ -58,6 +63,19 @@ export function App() {
     setMarkers(current => [...current, marker]); setSelectedMarkerId(marker.id);
   }
   function removeMarker(id: string) { setMarkers(current => current.filter(marker => marker.id !== id)); if (selectedMarkerId === id) setSelectedMarkerId(null); }
+  async function calculateDaylight() {
+    if (!selectedLocation) return;
+    setSolarState('loading'); setSolarError(null); setSolarResult(null);
+    try {
+      const { latitude, longitude } = selectedLocation.coordinates;
+      const response = await fetch(`/api/solar?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}&date=${encodeURIComponent(solarDate)}`, { headers: { Accept: 'application/json' } });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.detail ?? body.error ?? 'Solar calculation failed.');
+      setSolarResult(body); setSolarState('idle');
+    } catch (error) { setSolarState('error'); setSolarError(error instanceof Error ? error.message : 'Solar backend is unavailable.'); }
+  }
+  const formatUtc = (value: string | null) => value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC' : 'Undefined';
+  const formatDuration = (seconds: number | null) => seconds === null ? 'Undefined' : `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
 
   return <main className="app-shell">
     <header className="topbar"><a className="brand" href="#explore" aria-label="Terrene exploration home"><span className="brand-mark" aria-hidden="true">◉</span> Terrene</a><nav aria-label="Primary navigation"><a href="#explore">Explore</a></nav><span className="status-pill" data-status={globeStatus} role="status"><span aria-hidden="true" />{statusLabel[globeStatus]}</span></header>
@@ -82,6 +100,7 @@ export function App() {
         {selectedLocation ? <><h2>{selectedLocation.name}</h2>{selectedLocation.displayName && <p className="place-name">{selectedLocation.displayName}</p>}<dl><div><dt>Latitude</dt><dd>{selectedLocation.coordinates.latitude.toFixed(4)}°</dd></div><div><dt>Longitude</dt><dd>{selectedLocation.coordinates.longitude.toFixed(4)}°</dd></div>{selectedLocation.coordinates.heightMeters !== undefined && <div><dt>Ellipsoid height</dt><dd>{selectedLocation.coordinates.heightMeters.toFixed(0)} m</dd></div>}</dl><div className="button-row"><button onClick={addMarker}>Add marker</button><button className="quiet" onClick={() => {setSelectedLocation(null); setFlightLocation(null); setSelectedMarkerId(null);}}>Clear</button></div></> : <p className="hint">Choose an example, a search result, or a point on the globe.</p>}
       </aside>
       <aside className="marker-panel panel" aria-label="Map markers"><p className="eyebrow">Markers</p>{markers.length ? <ul className="markers">{markers.map(marker => <li key={marker.id} className={selectedMarkerId === marker.id ? 'selected' : ''}><button onClick={() => selectMarker(marker.id)} aria-pressed={selectedMarkerId === marker.id}>{marker.label}<span>{coordinatesText(marker.coordinates)}</span></button><button className="icon-button" aria-label={`Remove ${marker.label} marker`} onClick={() => removeMarker(marker.id)}>×</button></li>)}</ul> : <p className="hint">Saved points will appear here.</p>}</aside>
+      <aside className="solar-panel panel" aria-label="Solar explorer"><p className="eyebrow">Solar explorer</p><p className="hint">Calculate daylight in UTC for the selected coordinates.</p><label htmlFor="solar-date">Date</label><div className="search-row"><input id="solar-date" type="date" value={solarDate} onChange={event => setSolarDate(event.target.value)} /><button onClick={calculateDaylight} disabled={!selectedLocation || solarState === 'loading'}>{solarState === 'loading' ? 'Calculating…' : 'Calculate daylight'}</button></div>{solarError && <p className="message error" role="alert">{solarError}</p>}{solarResult && <dl className="solar-results"><div><dt>Sunrise</dt><dd>{formatUtc(solarResult.sunrise_utc)}</dd></div><div><dt>Sunset</dt><dd>{formatUtc(solarResult.sunset_utc)}</dd></div><div><dt>Solar noon</dt><dd>{formatUtc(solarResult.solar_noon_utc)}</dd></div><div><dt>Day length</dt><dd>{formatDuration(solarResult.day_length_seconds)}</dd></div></dl>}{solarResult?.condition && <p className="hint">{solarResult.condition === 'polar-day' ? 'Polar day: sunrise and sunset are undefined.' : 'Polar night: sunrise and sunset are undefined.'}</p>}</aside>
     </section>
   </main>;
 }

@@ -1,5 +1,7 @@
 node_modules/
 dist/
+dist-server/
+*.tsbuildinfo
 public/cesium/
 .env
 .env.local

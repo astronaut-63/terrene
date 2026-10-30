@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   build: { rollupOptions: { input: { app: 'index.html', earth: 'earth-demo.html' } } },
+  server: { proxy: { '/api/solar': 'http://localhost:3002', '/api': 'http://localhost:3001' } },
   test: {
     environment: "jsdom",
     include: ['src/**/*.test.tsx'],
