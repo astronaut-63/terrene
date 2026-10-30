@@ -32,6 +32,7 @@ beforeEach(async () => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   vi.stubEnv('VITE_CESIUM_ION_TOKEN', 'test-only-token');
   vi.stubEnv('VITE_CESIUM_ION_IMAGERY_ASSET_ID', '42');
+  vi.stubEnv('VITE_CESIUM_ION_LABELS_ASSET_ID', '');
   const { Event } = await import('cesium');
   imagery = { errorEvent: new Event() }; terrain = { errorEvent: new Event() };
   mock.fallback.mockResolvedValue({ errorEvent: new Event() });

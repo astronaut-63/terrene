@@ -98,7 +98,7 @@ export function App() {
         <div className="example-buttons">{examples.map(location => <button className="quiet" key={location.id} onClick={() => selectLocation(location)}>{location.name}</button>)}</div>
         <p className="hint">Examples work without search credentials. Drag to rotate, scroll to zoom, middle-drag to tilt. Click the Earth to inspect a point.</p>
         <div className="map-labels-control">
-          <label><input type="checkbox" checked={showLabels} disabled={labelsStatus !== 'enabled' && labelsStatus !== 'hidden'} onChange={event => setShowLabels(event.target.checked)} /> Map labels</label>
+          <label><input type="checkbox" checked={labelsStatus === 'enabled' ? showLabels : false} disabled={labelsStatus !== 'enabled' && labelsStatus !== 'hidden'} onChange={event => setShowLabels(event.target.checked)} /> Map labels</label>
           <span className="hint">{labelsStatusText[labelsStatus]}</span>
         </div>
         {globeError && <p className="message engine-message" role="status">{globeError.message}</p>}
