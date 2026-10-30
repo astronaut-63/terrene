@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import {
   BoundingSphere, Cartesian2, Cartesian3, Cartographic, CesiumTerrainProvider,
   Color, Credit, EllipsoidTerrainProvider, Entity, HeadingPitchRange, HeightReference,
-  IonImageryProvider, IonResource, LabelStyle, Math as CesiumMath, ScreenSpaceEventHandler,
+  ImageryLayer, IonImageryProvider, IonResource, LabelStyle, Math as CesiumMath, ScreenSpaceEventHandler,
   ScreenSpaceEventType, TileMapServiceImageryProvider, Viewer, buildModuleUrl,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
-import type { EarthGlobeProps, GlobeCamera, GlobeStatus } from './contracts';
+import type { EarthGlobeProps, GlobeCamera, GlobeLabelsStatus, GlobeStatus } from './contracts';
 import { markerPlan, validCoordinates } from './logic';
 import { attachSearch } from './search';
 
@@ -16,6 +16,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
   latest.current = props;
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [fatal, setFatal] = useState('');
+  const labelsLayer = useRef<ImageryLayer | null>(null);
 
   useEffect(() => {
     let disposed = false;
@@ -24,6 +25,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
     let instance: Viewer | undefined;
     const cleanups: (() => void)[] = [];
     const status = (value: GlobeStatus) => { if (!disposed) latest.current.onStatusChange?.(value); };
+    const labelsStatus = (value: GlobeLabelsStatus) => { if (!disposed) latest.current.onLabelsStatusChange?.(value); };
     const fail = (code: string, message: string) => {
       if (disposed) return;
       degraded = true;
@@ -77,6 +79,9 @@ export function EarthGlobe(props: EarthGlobeProps) {
 
       const token = import.meta.env.VITE_CESIUM_ION_TOKEN?.trim();
       const imageryId = Number(import.meta.env.VITE_CESIUM_ION_IMAGERY_ASSET_ID);
+      const labelsId = Number(import.meta.env.VITE_CESIUM_ION_LABELS_ASSET_ID);
+      const labelsConfigured = !!token && Number.isSafeInteger(labelsId) && labelsId > 0 && labelsId !== imageryId;
+      labelsStatus(labelsConfigured ? 'loading' : 'unavailable');
       if (token) {
         try { cleanups.push(attachSearch(v, token, () => fail('GEOCODER_FAILED', 'Location search is unavailable. Check geocode permission and network access.'))); }
         catch { fail('GEOCODER_FAILED', 'Location search could not initialize; globe navigation remains available.'); }
@@ -103,6 +108,29 @@ export function EarthGlobe(props: EarthGlobeProps) {
             }));
           } catch { fail('ION_IMAGERY_FAILED', 'Ion imagery is unavailable; using bundled Natural Earth imagery.'); }
         } else fail('ION_IMAGERY_UNCONFIGURED', 'Using low-resolution Natural Earth imagery. Configure an ion imagery asset for detailed imagery.');
+        if (labelsConfigured && !disposed) {
+          try {
+            const labelsImagery = await IonImageryProvider.fromAssetId(labelsId, { accessToken: token });
+            if (disposed || v.isDestroyed()) return;
+            const layer = v.imageryLayers.addImageryProvider(labelsImagery);
+            layer.show = latest.current.showLabels !== false;
+            labelsLayer.current = layer;
+            labelsStatus(layer.show ? 'enabled' : 'hidden');
+            cleanups.push(labelsImagery.errorEvent.addEventListener(() => {
+              layer.show = false;
+              labelsStatus('failed');
+              fail('ION_LABELS_FAILED', 'Map labels failed to load; base imagery remains available.');
+              v.scene.requestRender();
+            }));
+            cleanups.push(() => {
+              if (labelsLayer.current === layer) labelsLayer.current = null;
+              if (!v.isDestroyed()) v.imageryLayers.remove(layer, true);
+            });
+          } catch {
+            labelsStatus('failed');
+            fail('ION_LABELS_FAILED', 'Map labels are unavailable; base imagery remains available.');
+          }
+        }
         if (token && !disposed) {
           try {
             const resource = await IonResource.fromAssetId(1, { accessToken: token });
@@ -141,6 +169,15 @@ export function EarthGlobe(props: EarthGlobeProps) {
       if (instance && !instance.isDestroyed()) instance.destroy();
     };
   }, []);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed()) return;
+    const layer = labelsLayer.current;
+    if (!layer) return;
+    layer.show = props.showLabels !== false;
+    latest.current.onLabelsStatusChange?.(layer.show ? 'enabled' : 'hidden');
+    viewer.scene.requestRender();
+  }, [viewer, props.showLabels]);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;

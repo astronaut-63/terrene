@@ -27,6 +27,8 @@ export interface GlobeCamera {
 
 export type GlobeStatus = "initializing" | "ready" | "degraded" | "error";
 
+export type GlobeLabelsStatus = "loading" | "enabled" | "hidden" | "unavailable" | "failed";
+
 export interface GlobeError {
   code: string;
   message: string;
@@ -41,6 +43,8 @@ export interface EarthGlobeProps {
   onMarkerSelected?: (markerId: string) => void;
   onStatusChange?: (status: GlobeStatus) => void;
   onError?: (error: GlobeError) => void;
+  showLabels?: boolean;
+  onLabelsStatusChange?: (status: GlobeLabelsStatus) => void;
 }
 
 export type LocationSearch = (

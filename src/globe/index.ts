@@ -4,6 +4,7 @@ export type {
   GeographicLocation,
   GlobeCamera,
   GlobeError,
+  GlobeLabelsStatus,
   GlobeMarker,
   GlobeStatus,
   LocationSearch,

@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
-import { EarthGlobe, searchLocations, type GeoCoordinates, type GeographicLocation, type GlobeMarker, type GlobeStatus, type GlobeError } from './globe';
+import { EarthGlobe, searchLocations, type GeoCoordinates, type GeographicLocation, type GlobeLabelsStatus, type GlobeMarker, type GlobeStatus, type GlobeError } from './globe';
 
 const examples: GeographicLocation[] = [
   { id: 'example-everest', name: 'Everest', displayName: 'Himalayas · example destination', coordinates: { latitude: 27.9881, longitude: 86.925 } },
@@ -10,6 +10,7 @@ type SearchState = 'idle' | 'loading' | 'success' | 'empty' | 'error';
 type SolarResult = { sunrise_utc: string | null; sunset_utc: string | null; solar_noon_utc: string; day_length_seconds: number | null; condition?: string; solar_elevation_degrees: number | null; solar_azimuth_degrees: number | null };
 const coordinatesText = (c: GeoCoordinates) => `${c.latitude.toFixed(4)}° latitude, ${c.longitude.toFixed(4)}° longitude`;
 const statusLabel: Record<GlobeStatus, string> = { initializing: 'Initialising globe', ready: 'Globe ready', degraded: 'Globe running with limited resources', error: 'Globe unavailable' };
+const labelsStatusText: Record<GlobeLabelsStatus, string> = { loading: 'Loading labels…', enabled: 'Labels on', hidden: 'Labels off', unavailable: 'Configure a labels-only ion asset', failed: 'Labels unavailable' };
 
 export function App() {
   const [query, setQuery] = useState('');
@@ -23,6 +24,8 @@ export function App() {
   const [selectedMarkerId, setSelectedMarkerId] = useState<string | null>(null);
   const [globeStatus, setGlobeStatus] = useState<GlobeStatus>('initializing');
   const [globeError, setGlobeError] = useState<GlobeError | null>(null);
+  const [showLabels, setShowLabels] = useState(true);
+  const [labelsStatus, setLabelsStatus] = useState<GlobeLabelsStatus>('loading');
   const [solarDate, setSolarDate] = useState('2026-11-01');
   const [solarResult, setSolarResult] = useState<SolarResult | null>(null);
   const [solarState, setSolarState] = useState<'idle' | 'loading' | 'error'>('idle');
@@ -81,8 +84,8 @@ export function App() {
     <header className="topbar"><a className="brand" href="#explore" aria-label="Terrene exploration home"><span className="brand-mark" aria-hidden="true">◉</span> Terrene</a><nav aria-label="Primary navigation"><a href="#explore">Explore</a></nav><span className="status-pill" data-status={globeStatus} role="status"><span aria-hidden="true" />{statusLabel[globeStatus]}</span></header>
     <section className="exploration" id="explore" aria-label="Globe exploration">
       <div className="globe-stage" aria-label="Interactive Earth">
-        <EarthGlobe selectedLocation={flightLocation} markers={markers} onCoordinatesSelected={selectCoordinates}
-          onMarkerSelected={selectMarker} onStatusChange={setGlobeStatus} onError={setGlobeError} />
+        <EarthGlobe selectedLocation={flightLocation} markers={markers} showLabels={showLabels} onCoordinatesSelected={selectCoordinates}
+          onMarkerSelected={selectMarker} onStatusChange={setGlobeStatus} onError={setGlobeError} onLabelsStatusChange={setLabelsStatus} />
       </div>
       <aside className="search-panel panel" aria-label="Location search">
         <p className="eyebrow">Find a place</p>
@@ -94,6 +97,10 @@ export function App() {
         <p className="eyebrow example-title">Explore example destinations</p>
         <div className="example-buttons">{examples.map(location => <button className="quiet" key={location.id} onClick={() => selectLocation(location)}>{location.name}</button>)}</div>
         <p className="hint">Examples work without search credentials. Drag to rotate, scroll to zoom, middle-drag to tilt. Click the Earth to inspect a point.</p>
+        <div className="map-labels-control">
+          <label><input type="checkbox" checked={showLabels} disabled={labelsStatus !== 'enabled' && labelsStatus !== 'hidden'} onChange={event => setShowLabels(event.target.checked)} /> Map labels</label>
+          <span className="hint">{labelsStatusText[labelsStatus]}</span>
+        </div>
         {globeError && <p className="message engine-message" role="status">{globeError.message}</p>}
       </aside>
       <aside className="location-panel panel" aria-label="Selected location"><p className="eyebrow">Selected location</p>

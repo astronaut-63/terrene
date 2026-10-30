@@ -10,7 +10,7 @@ vi.mock('cesium', async importOriginal => {
   class Viewer {
     scene = { globe: { ellipsoid: actual.Ellipsoid.WGS84, tilesLoaded: false }, renderError: new actual.Event(), postRender: new actual.Event(), requestRender: vi.fn() };
     camera = { setView: vi.fn(), cancelFlight: vi.fn(), flyToBoundingSphere: vi.fn() };
-    imageryLayers = { layers: [] as any[], addImageryProvider: (provider: any) => { const layer = { provider, show: true }; this.imageryLayers.layers.push(layer); return layer; } };
+    imageryLayers = { layers: [] as any[], addImageryProvider: (provider: any) => { const layer = { provider, show: true }; this.imageryLayers.layers.push(layer); return layer; }, remove: (layer: any) => { const index = this.imageryLayers.layers.indexOf(layer); if (index >= 0) this.imageryLayers.layers.splice(index, 1); return index >= 0; } };
     entities = { values: [], remove: vi.fn(), removeById: vi.fn(), add: vi.fn() };
     cesiumWidget = { creditDisplay: { addStaticCredit: vi.fn() } };
     terrainProvider: any;
@@ -59,6 +59,38 @@ it('waits for visible tile loading and never treats provider metadata as ready',
   expect(status).toHaveBeenLastCalledWith('ready');
   expect(mock.imagery).toHaveBeenCalledWith(42, { accessToken: 'test-only-token' });
   expect(mock.resource).toHaveBeenCalledWith(1, { accessToken: 'test-only-token' });
+});
+it('adds a labels overlay above the base and toggles it without duplication', async () => {
+  vi.stubEnv('VITE_CESIUM_ION_LABELS_ASSET_ID', '3830185');
+  const statuses: string[] = [];
+  const view = render(<EarthGlobe showLabels onLabelsStatusChange={status => statuses.push(status)} />);
+  await waitFor(() => expect(mock.viewers[0].imageryLayers.layers).toHaveLength(3));
+  const layers = mock.viewers[0].imageryLayers.layers;
+  expect(layers[0].provider).toBeInstanceOf(Object);
+  expect(layers[2].show).toBe(true);
+  view.rerender(<EarthGlobe showLabels={false} onLabelsStatusChange={status => statuses.push(status)} />);
+  expect(mock.viewers[0].imageryLayers.layers).toHaveLength(3);
+  expect(layers[2].show).toBe(false);
+  view.rerender(<EarthGlobe showLabels onLabelsStatusChange={status => statuses.push(status)} />);
+  expect(layers[2].show).toBe(true);
+  expect(statuses).toContain('enabled');
+  expect(statuses).toContain('hidden');
+  view.unmount();
+  expect(mock.viewers[0].imageryLayers.layers).toHaveLength(2);
+});
+it('keeps the base imagery when the labels asset is not configured', async () => {
+  const status = vi.fn();
+  render(<EarthGlobe onLabelsStatusChange={status} />);
+  await waitFor(() => expect(mock.viewers[0].imageryLayers.layers).toHaveLength(2));
+  expect(status).toHaveBeenCalledWith('unavailable');
+});
+it('keeps the base imagery when the labels provider fails', async () => {
+  vi.stubEnv('VITE_CESIUM_ION_LABELS_ASSET_ID', '3830185');
+  mock.imagery.mockResolvedValueOnce(imagery).mockRejectedValueOnce(new Error('labels unavailable'));
+  const status = vi.fn();
+  render(<EarthGlobe onLabelsStatusChange={status} />);
+  await waitFor(() => expect(status).toHaveBeenCalledWith('failed'));
+  expect(mock.viewers[0].imageryLayers.layers).toHaveLength(2);
 });
 it.each(['imagery', 'terrain'])('survives %s authentication/network initialization failure without leaking details', async provider => {
   mock[provider as 'imagery' | 'terrain'].mockRejectedValueOnce(new Error('private-token-url'));
