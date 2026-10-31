@@ -2,7 +2,7 @@ import os
 from typing import Literal
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 router = APIRouter(prefix='/api/v1')
 
@@ -18,6 +18,40 @@ class RouteRequest(BaseModel):
     maximum_incline: float = Field(default=6, ge=0, le=15)
 
 PROFILES = {'driving': 'driving-car', 'walking': 'foot-walking', 'cycling': 'cycling-regular', 'wheelchair': 'wheelchair'}
+
+class RouteGeometry(BaseModel):
+    type: Literal['LineString'] = 'LineString'
+    coordinates: list[tuple[float, float]] = Field(min_length=2, max_length=100000)
+
+    @field_validator('coordinates')
+    @classmethod
+    def valid_coordinates(cls, coordinates):
+        for lon, lat in coordinates:
+            Point(latitude=lat, longitude=lon)
+        return coordinates
+
+
+class RouteData(BaseModel):
+    """Reusable route object; never infer duration from an invented speed."""
+    geometry: RouteGeometry
+    distance_m: float = Field(ge=0, le=40000000, allow_inf_nan=False)
+    duration_seconds: float = Field(ge=0, le=2592000, allow_inf_nan=False)
+    distance_km: float = 0
+    bbox: list[float] | None = None
+    instructions: list = Field(default_factory=list)
+    attribution: str = 'openrouteservice | © OpenStreetMap contributors'
+    accessibility: str = 'not_assessed'
+    limitations: str = 'Estimated duration is not traffic-aware. Accessibility is not guaranteed.'
+
+    @model_validator(mode='after')
+    def usable_duration(self):
+        moving = any(p != self.geometry.coordinates[0] for p in self.geometry.coordinates[1:])
+        if moving and (self.duration_seconds <= 0 or self.distance_m <= 0):
+            raise ValueError('A moving route needs positive distance and duration.')
+        if not moving and (self.duration_seconds != 0 or self.distance_m != 0):
+            raise ValueError('A zero-length route needs zero distance and duration.')
+        self.distance_km = self.distance_m / 1000
+        return self
 
 def provider_body(request):
     body = {'coordinates': [[p.longitude, p.latitude] for p in [request.origin, *request.stops, request.destination]]}
@@ -45,7 +79,7 @@ async def route(request: RouteRequest):
         geometry = feature['geometry']
         if geometry['type'] != 'LineString' or len(geometry['coordinates']) < 2:
             raise ValueError('Invalid route')
-        return {'geometry': geometry, 'distance_m': summary['distance'], 'distance_km': summary['distance'] / 1000, 'duration_seconds': summary['duration'], 'bbox': data.get('bbox'), 'instructions': feature['properties'].get('segments', []), 'attribution': 'openrouteservice | © OpenStreetMap contributors', 'accessibility': 'unknown' if request.mode == 'wheelchair' else 'not_assessed', 'limitations': 'Estimated duration is not traffic-aware. Accessibility depends on mapped data and is not guaranteed.'}
+        return RouteData(geometry=geometry, distance_m=summary['distance'], duration_seconds=summary['duration'], bbox=data.get('bbox'), instructions=feature['properties'].get('segments', []), accessibility='unknown' if request.mode == 'wheelchair' else 'not_assessed').model_dump(mode='json')
     except httpx.TimeoutException:
         raise HTTPException(504, 'Routing provider timed out.')
     except (httpx.HTTPError, KeyError, IndexError, ValueError, TypeError):

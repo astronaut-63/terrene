@@ -2,6 +2,17 @@
 
 This is an incomplete MVP. Endpoint existence alone is not end-to-end verification.
 
+## Journey engine update — 2026-10-31
+
+The following supersedes older weather/journey entries below. [API contract and local verification guide](docs/journey-simulation.md).
+
+- Journey backend: implemented and covered by deterministic tests. Existing endpoint and timeline fields retained; validated route reuse, configurable 2–25 checkpoints or bounded spacing, geodesic geometry sampling, elapsed seconds, UTC arrival times, and typed OpenAPI responses added. Zero-length routes return one checkpoint. Provider duration is required, never invented.
+- Weather: shared application-lifetime HTTP pool, multi-location requests, three concurrent batches per worker, explicit timeouts, bounded ten-minute cache, eight nullable measurements, and distinct partial/horizon/history/provider/no-data states. Weather failure does not destroy a valid route.
+- Frontend integration: existing timeline and shared map callbacks preserved. Input changes/new requests clear stale results and route geometry; partial-weather reasons and forecast hours are displayed. Request cancellation on unmount added.
+- Verification: 29 backend tests, 10 Node tests, and 30 Vitest tests passed. `npm run typecheck` and `npm run build` passed; large map/globe chunk warnings remain. Backend tests required execution outside the Windows sandbox because Python event-loop socket-pair creation stalled there.
+- Live verification: one Open-Meteo point request through the new adapter returned all eight measurements. ORS was not tested live (HEIGIT_API_KEY absent); real browser/map journey flow was not verified. Mocked API/lifespan tests cover both supplied routes and calculated-route responses.
+- No database migrations, trip ownership changes, or new dependencies. Traffic, closures, historical weather, transit, stop durations, comparison UI and simulation persistence remain outside this implementation.
+
 ## Latest continuation
 
 - POI discovery: PARTIALLY_COMPLETED. Bounded Overpass nearby queries, five-point sampled along-route queries, caching, category controls and markers in both maps are implemented. Live verification and clustering remain.

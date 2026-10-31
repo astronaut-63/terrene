@@ -56,3 +56,28 @@ describe("App", () => {
     expect((await screen.findByRole("alert")).textContent).toContain("Search provider unavailable");
   });
 });
+
+it('removes temporary checkpoint markers and selection when journey inputs change', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({
+    route: { geometry: { type: 'LineString', coordinates: [[34, 12], [34, 12]] } },
+    limitations: 'Estimated travel only.', checkpoints: [{ index: 0, progress: 0, distance_m: 0,
+      coordinates: { latitude: 12, longitude: 34 }, arrival: '2026-10-31T12:00:00Z',
+      weather: { status: 'provider_error', reason: 'Forecast unavailable.', values: {}, forecast_timestamp: null } }],
+  }) });
+  vi.stubGlobal('fetch', fetchMock);
+  try {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick test point' }));
+    fireEvent.click(screen.getByText('Use selected place as journey origin'));
+    fireEvent.click(screen.getByText('Use selected place as journey destination'));
+    fireEvent.change(screen.getByLabelText('Departure in your browser timezone'), { target: { value: '2026-10-31T12:00' } });
+    fireEvent.click(screen.getByText('Generate journey timeline'));
+    await screen.findByText('Forecast unavailable.');
+    fireEvent.click(screen.getByRole('button', { name: /0%/ }));
+    expect(screen.getByTestId('marker-count').textContent).toBe('1');
+    expect(screen.getByTestId('flight').textContent).toBe('Checkpoint 1');
+    fireEvent.change(screen.getByLabelText('Departure in your browser timezone'), { target: { value: '2026-11-01T12:00' } });
+    expect(screen.getByTestId('marker-count').textContent).toBe('0');
+    expect(screen.getByTestId('flight').textContent).toBe('no flight');
+  } finally { vi.unstubAllGlobals(); }
+});
