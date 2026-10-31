@@ -1,5 +1,9 @@
 ## Current frontend workspace, 31 October 2026
 
+The routing/search repair adds location fields directly to Journey, Route and
+Itinerary, plus a header search dropdown that preserves the active tool.
+See [routing diagnosis, search behavior and verification](docs/ROUTING_SEARCH_REPAIR.md).
+
 The application opens in the 2D map with persistent search and a collapsible tool sidebar. Routes, journeys and itineraries have separate route ownership; selection and camera context remain shared. Feature inputs survive navigation. Legal draft pages are at `/privacy` and `/terms`; the initial favicon is installed.
 
 The frontend uses `src/services/apiClient.ts` and typed contracts. Keep the existing FastAPI backend `backend.main:app` running on port 3002 in a separate process; `npm run dev` starts only Vite. The compatibility Node server is not the canonical API backend.
@@ -80,6 +84,19 @@ On Windows, the included batch files automate the setup below. Double-click
 `setup.bat` once, then run `start.bat` whenever you want to launch the local
 API and frontend. The launcher opens the FastAPI service on port 3002 and Vite
 on port 5173 in separate Command Prompt windows.
+Close existing server windows before starting again. The launcher checks for
+occupied ports and applies migrations using this checkout's `.env`. Restart
+both services after editing `.env`; an already-running backend retains its
+startup configuration.
+
+The default public Nominatim endpoint requires explicit searches: type a place
+in any location field and press Enter or Search, then choose a suggestion.
+For a Nominatim deployment whose terms permit autocomplete, configure
+`NOMINATIM_SEARCH_URL` and `NOMINATIM_AUTOCOMPLETE=true` in `.env` and restart.
+The public OSMF endpoint always disables typeahead. Its
+[usage policy](https://operations.osmfoundation.org/policies/nominatim/) also
+requires attribution, caching and an application-wide maximum of one request
+per second. The existing backend cache and single-worker throttle remain in use.
 
 ```sh
 npm ci

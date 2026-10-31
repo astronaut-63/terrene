@@ -1,9 +1,24 @@
 import unittest
+import os
+from unittest.mock import patch
 from backend.search import normalize
 from backend.main import app
 from fastapi.testclient import TestClient
 
 class SearchTests(unittest.TestCase):
+    def test_autocomplete_only_for_an_explicitly_permitted_deployment(self):
+        client = TestClient(app)
+        for endpoint, flag, expected in [
+            ('https://nominatim.openstreetmap.org/search', 'true', False),
+            ('https://NOMINATIM.openstreetmap.org/search', 'true', False),
+            ('https://nominatim.openstreetmap.org./search', 'true', False),
+            ('', 'true', False),
+            ('https://maps.example.test/search', 'false', False),
+            ('https://maps.example.test/search', 'true', True),
+        ]:
+            with patch.dict(os.environ, {'NOMINATIM_SEARCH_URL': endpoint, 'NOMINATIM_AUTOCOMPLETE': flag}):
+                self.assertEqual(client.get('/api/v1/locations/config').json(), {'autocomplete': expected})
+
     def test_normalization(self):
         for name in ['Mumbai', 'Bengaluru', 'Delhi', 'Ooty', 'London']:
             result = normalize([{'place_id': 1, 'lat': '19.076', 'lon': '72.8777', 'display_name': name + ', Country'}])

@@ -24,10 +24,18 @@ export const searchLocations: LocationSearch = async (query, signal) => {
     if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
     throw new Error('Location search is unavailable. Try again later.');
   }
+  const json = /\bapplication\/(?:[\w.-]+\+)?json\b/i.test(response.headers.get('content-type') ?? '');
+  if (!json) throw new Error(response.ok ? 'Location search returned a non-JSON response.' : `Location search service could not be reached (HTTP ${response.status}). Check that the local API is running.`);
   let body: unknown;
-  try { body = await response.json(); } catch { throw new Error('Location search returned invalid data.'); }
+  try { body = await response.json(); } catch {
+    if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
+    throw new Error(response.ok ? 'Location search returned malformed JSON.' : `Location search failed (HTTP ${response.status}); its error response was malformed.`);
+  }
+  if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
   if (!response.ok) {
-    const message = errorMessage(body, 'Location search failed.');
+    const fallback = `Location search failed (HTTP ${response.status}).`;
+    const detail = errorMessage(body, fallback);
+    const message = /[<>]|https?:\/\/|authorization|api[_ -]?key|token|password/i.test(detail) ? fallback : detail;
     throw new Error(message);
   }
   if (!isLocationSearchResponse(body)) throw new Error('Location search returned an unexpected response structure.');

@@ -61,7 +61,7 @@ describe("App", () => {
     render(<App />);
     fireEvent.change(screen.getByLabelText("Search places, streets and destinations"), { target: { value: "Delhi" } });
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
-    fireEvent.click(await screen.findByRole("button", { name: /Delhi/ }));
+    fireEvent.click(await screen.findByRole("option", { name: /Delhi/ }));
     expect(screen.getByText("28.6139°")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save place" }));
     fireEvent.click(screen.getByRole("button", { name: "Saved places" }));
@@ -88,4 +88,28 @@ it('preserves route inputs while switching geographical tools', () => {
  expect((screen.getByLabelText('Travel mode') as HTMLSelectElement).value).toBe('walking');
  expect((screen.getByRole('button', { name: 'Calculate route' }) as HTMLButtonElement).disabled).toBe(false);
  expect(screen.getByTestId('flight').textContent).toBe('Selected point');
+});
+
+it('keeps Journey active and its endpoints independent during contextual and global searches', async () => {
+ const places = ['Mumbai', 'Pune', 'Delhi', 'Nashik'].map((name, index) => ({ id: name, name, displayName: name + ', India', coordinates: { latitude: 18 + index, longitude: 72 + index } }));
+ vi.mocked(searchLocations).mockImplementation(async query => places.filter(place => place.name === query));
+ render(<App />); fireEvent.click(screen.getByRole('button', { name: 'Journey simulation' }));
+ async function choose(label: string, name: string) {
+   const field = screen.getByRole('combobox', { name: label });
+   fireEvent.change(field, { target: { value: name } }); fireEvent.keyDown(field, { key: 'Enter' });
+   fireEvent.click(await screen.findByRole('option', { name: name + ' ' + name + ', India' }));
+ }
+ await choose('Journey origin', 'Mumbai'); await choose('Journey destination', 'Pune');
+ await choose('Search places, streets and destinations', 'Delhi');
+ expect((screen.getByLabelText('Journey origin') as HTMLInputElement).value).toBe('Mumbai');
+ expect((screen.getByLabelText('Journey destination') as HTMLInputElement).value).toBe('Pune');
+ expect(screen.getByRole('button', { name: 'Journey simulation' }).getAttribute('aria-current')).toBe('page');
+ expect(screen.getByTestId('flight').textContent).toBe('Delhi');
+ await choose('Journey origin', 'Nashik');
+ expect((screen.getByLabelText('Journey destination') as HTMLInputElement).value).toBe('Pune');
+ await choose('Journey destination', 'Mumbai');
+ expect((screen.getByLabelText('Journey origin') as HTMLInputElement).value).toBe('Nashik');
+ fireEvent.click(screen.getByRole('button', { name: 'Discover places' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Journey simulation' }));
+ expect((screen.getByLabelText('Journey destination') as HTMLInputElement).value).toBe('Mumbai');
 });

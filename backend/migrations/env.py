@@ -1,4 +1,5 @@
 from alembic import context
+from backend import config as _config  # Load the same repository .env as FastAPI.
 from backend.database import engine, Base
 
 with engine.connect() as connection:

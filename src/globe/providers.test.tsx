@@ -1,6 +1,6 @@
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { EarthGlobe } from './EarthGlobe';
+import { EarthGlobe, imageryFailureMessage } from './EarthGlobe';
 import { searchLocations, attachSearch } from './search';
 import { Cartesian3, Rectangle, EllipsoidTerrainProvider } from 'cesium';
 
@@ -8,7 +8,7 @@ const mock = vi.hoisted(() => ({ imagery: vi.fn(), terrain: vi.fn(), resource: v
 vi.mock('cesium', async importOriginal => {
   const actual = await importOriginal<typeof import('cesium')>();
   class Viewer {
-    scene = { globe: { ellipsoid: actual.Ellipsoid.WGS84, tilesLoaded: false }, renderError: new actual.Event(), postRender: new actual.Event(), requestRender: vi.fn() };
+    scene = { screenSpaceCameraController: { minimumZoomDistance: 0 }, globe: { ellipsoid: actual.Ellipsoid.WGS84, tilesLoaded: false }, renderError: new actual.Event(), postRender: new actual.Event(), requestRender: vi.fn() };
     camera = { setView: vi.fn(), cancelFlight: vi.fn(), flyToBoundingSphere: vi.fn() };
     imageryLayers = { layers: [] as any[], addImageryProvider: (provider: any) => { const layer = { provider, show: true }; this.imageryLayers.layers.push(layer); return layer; }, remove: (layer: any) => { const index = this.imageryLayers.layers.indexOf(layer); if (index >= 0) this.imageryLayers.layers.splice(index, 1); return index >= 0; } };
     entities = { values: [], remove: vi.fn(), removeById: vi.fn(), add: vi.fn() };
@@ -34,12 +34,27 @@ beforeEach(async () => {
   vi.stubEnv('VITE_CESIUM_ION_IMAGERY_ASSET_ID', '42');
   vi.stubEnv('VITE_CESIUM_ION_LABELS_ASSET_ID', '');
   const { Event } = await import('cesium');
-  imagery = { errorEvent: new Event() }; terrain = { errorEvent: new Event() };
+  imagery = { errorEvent: new Event(), requestImage: vi.fn().mockResolvedValue({}) }; terrain = { errorEvent: new Event() };
   mock.fallback.mockResolvedValue({ errorEvent: new Event() });
   mock.imagery.mockResolvedValue(imagery); mock.resource.mockResolvedValue({}); mock.terrain.mockResolvedValue(terrain);
   mock.setup.mockImplementation(() => {}); mock.geocode.mockResolvedValue([]);
 });
 afterEach(() => { cleanup(); vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
+
+it('classifies provider HTTP failures without echoing private messages or URLs', () => {
+ for (const [statusCode, expected] of [[401, 'authentication'], [403, 'access denied'], [404, 'not found'], [429, 'rate-limited']] as const) {
+   const message = imageryFailureMessage({ statusCode, message: 'private-token-url' });
+   expect(message).toContain(expected); expect(message).not.toContain('private-token-url');
+ }
+});
+
+it('restores the exact saved eye without reflying to an already-selected location', async () => {
+ const eye = { latitude: 22, longitude: 35, heightMeters: 2500000 };
+ render(<EarthGlobe initialCamera={{ center: { latitude: 22, longitude: 35 }, eye, headingDegrees: 10, pitchDegrees: -60 }} selectedLocation={{ id: 'place', name: 'Place', coordinates: { latitude: 19, longitude: 72 } }} />);
+ await waitFor(() => expect(mock.viewers[0].imageryLayers.layers).toHaveLength(2));
+ expect(mock.viewers[0].camera.setView).toHaveBeenCalledWith(expect.objectContaining({ destination: Cartesian3.fromDegrees(35, 22, 2500000) }));
+ expect(mock.viewers[0].camera.flyToBoundingSphere).not.toHaveBeenCalled();
+});
 
 it.each([undefined, '', '   '])('keeps fallback and reports absent token %s', async token => {
   vi.stubEnv('VITE_CESIUM_ION_TOKEN', token);
@@ -57,9 +72,49 @@ it('waits for visible tile loading and never treats provider metadata as ready',
   const v = mock.viewers[0]; v.scene.postRender.raiseEvent();
   expect(status).not.toHaveBeenCalledWith('ready');
   v.scene.globe.tilesLoaded = true; v.scene.postRender.raiseEvent();
+  expect(status).not.toHaveBeenCalledWith('ready');
+  await imagery.requestImage(0, 0, 0);
+  v.scene.postRender.raiseEvent();
   expect(status).toHaveBeenLastCalledWith('ready');
   expect(mock.imagery).toHaveBeenCalledWith(42, { accessToken: 'test-only-token' });
   expect(mock.resource).toHaveBeenCalledWith(1, { accessToken: 'test-only-token' });
+});
+
+it('keeps a regional camera while imagery is merely configured and only unlocks close zoom after rendered tiles', async () => {
+ const status = vi.fn();
+ render(<EarthGlobe selectedLocation={{ id: 'mumbai', name: 'Mumbai', coordinates: { latitude: 19, longitude: 72 } }} onImageryStatusChange={status} />);
+ await waitFor(() => expect(mock.viewers[0].imageryLayers.layers).toHaveLength(2));
+ const v = mock.viewers[0];
+ expect(v.camera.flyToBoundingSphere.mock.calls.at(-1)[1].offset.range).toBe(5_000_000);
+ expect(v.scene.screenSpaceCameraController.minimumZoomDistance).toBe(2_500_000);
+ expect(status).not.toHaveBeenCalledWith('available');
+ await imagery.requestImage(0, 0, 0); v.scene.globe.tilesLoaded = true; v.scene.postRender.raiseEvent();
+ expect(status).toHaveBeenLastCalledWith('available');
+ expect(v.scene.screenSpaceCameraController.minimumZoomDistance).toBe(100);
+ imagery.errorEvent.raiseEvent({});
+ expect(status).toHaveBeenLastCalledWith('failed');
+ expect(v.scene.screenSpaceCameraController.minimumZoomDistance).toBe(2_500_000);
+});
+
+it('does not count discarded imagery or imagery outside the selected location coverage as available', async () => {
+ imagery.tileDiscardPolicy = { isReady: () => true, shouldDiscardImage: () => true };
+ const status = vi.fn(); render(<EarthGlobe selectedLocation={{ id: 'india', name: 'India', coordinates: { latitude: 19, longitude: 72 } }} onImageryStatusChange={status} />);
+ await waitFor(() => expect(mock.viewers[0].imageryLayers.layers).toHaveLength(2));
+ const v = mock.viewers[0]; await imagery.requestImage(0, 0, 0); v.scene.globe.tilesLoaded = true; v.scene.postRender.raiseEvent();
+ expect(status).not.toHaveBeenCalledWith('available');
+ imagery.rectangle = Rectangle.fromDegrees(-120, 20, -60, 50);
+ v.scene.postRender.raiseEvent(); expect(status).toHaveBeenLastCalledWith('outside_coverage');
+ expect(v.scene.screenSpaceCameraController.minimumZoomDistance).toBe(2_500_000);
+});
+
+it('fits real route geometry on the globe without rebuilding its Viewer', async () => {
+ const geometry = { type: 'LineString' as const, coordinates: [[72.8, 19], [88.3, 22.5]] as [number, number][] };
+ const view = render(<EarthGlobe fitRouteRequest={0} routeGeoJSON={geometry} />);
+ await waitFor(() => expect(mock.viewers).toHaveLength(1));
+ view.rerender(<EarthGlobe fitRouteRequest={1} routeGeoJSON={geometry} />);
+ await waitFor(() => expect(mock.viewers[0].camera.flyToBoundingSphere).toHaveBeenCalled());
+ expect(mock.viewers).toHaveLength(1);
+ expect(mock.viewers[0].camera.flyToBoundingSphere.mock.calls[0][0].radius).toBeGreaterThan(0);
 });
 it('adds a labels overlay above the base and toggles it without duplication', async () => {
   vi.stubEnv('VITE_CESIUM_ION_LABELS_ASSET_ID', '3830185');

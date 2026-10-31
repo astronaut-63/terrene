@@ -82,5 +82,9 @@ async def route(request: RouteRequest):
         return {'geometry': geometry, 'distance_m': distance, 'distance_km': distance / 1000, 'duration_seconds': duration, 'bbox': data.get('bbox'), 'instructions': feature['properties'].get('segments', []), 'attribution': 'openrouteservice by HeiGIT | © OpenStreetMap contributors', 'accessibility': 'unknown' if request.mode == 'wheelchair' else 'not_assessed', 'limitations': 'Estimated duration is not traffic-aware. Accessibility depends on mapped data and is not guaranteed.'}
     except httpx.TimeoutException:
         raise HTTPException(504, 'Routing provider timed out.')
-    except (httpx.HTTPError, KeyError, IndexError, ValueError, TypeError):
-        raise HTTPException(502, 'No usable route returned by the routing provider.')
+    except httpx.HTTPStatusError:
+        raise HTTPException(502, 'Routing provider rejected the route request.')
+    except httpx.RequestError:
+        raise HTTPException(502, 'Routing provider could not be reached.')
+    except (KeyError, IndexError, ValueError, TypeError):
+        raise HTTPException(502, 'Routing provider returned invalid route data.')

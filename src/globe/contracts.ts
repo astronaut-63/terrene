@@ -10,6 +10,7 @@ export interface GlobeMarker {
 }
 
 export interface GlobeCamera {
+  eye?: GeoCoordinates;
   center: GeoCoordinates;
   rangeMeters?: number;
   headingDegrees?: number;
@@ -19,6 +20,7 @@ export interface GlobeCamera {
 export type GlobeStatus = "initializing" | "ready" | "degraded" | "error";
 
 export type GlobeLabelsStatus = "loading" | "enabled" | "hidden" | "unavailable" | "failed";
+export type GlobeImageryStatus = 'fallback' | 'loading' | 'available' | 'failed' | 'outside_coverage';
 
 export interface GlobeError {
   code: string;
@@ -38,6 +40,8 @@ export interface EarthGlobeProps {
   onError?: (error: GlobeError) => void;
   showLabels?: boolean;
   onLabelsStatusChange?: (status: GlobeLabelsStatus) => void;
+  onImageryStatusChange?: (status: GlobeImageryStatus) => void;
+  fitRouteRequest?: number;
 }
 
 export type LocationSearch = (

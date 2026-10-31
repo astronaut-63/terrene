@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   BoundingSphere, Cartesian2, Cartesian3, Cartographic, CesiumTerrainProvider,
   Color, Credit, DistanceDisplayCondition, EllipsoidTerrainProvider, Entity, HeadingPitchRange, HeightReference,
-  ImageryLayer, IonImageryProvider, IonResource, LabelStyle, Math as CesiumMath, ScreenSpaceEventHandler,
+  ImageryLayer, IonImageryProvider, IonResource, LabelStyle, Math as CesiumMath, Rectangle, ScreenSpaceEventHandler,
   ScreenSpaceEventType, TileMapServiceImageryProvider, Viewer, buildModuleUrl,
 } from 'cesium';
 import 'cesium/Build/Cesium/Widgets/widgets.css';
@@ -17,6 +17,10 @@ export function EarthGlobe(props: EarthGlobeProps) {
   const [viewer, setViewer] = useState<Viewer | null>(null);
   const [fatal, setFatal] = useState('');
   const labelsLayer = useRef<ImageryLayer | null>(null);
+  const restoreSelection = useRef(!!props.initialCamera?.eye);
+  const detailedTilesAvailable = useRef(false);
+  const detailCoverage = useRef<Rectangle | null>(null);
+  const handledFit = useRef(props.fitRouteRequest ?? 0);
 
   useEffect(() => {
     let disposed = false;
@@ -33,6 +37,8 @@ export function EarthGlobe(props: EarthGlobeProps) {
       if (!broken) status('degraded');
     };
     status('initializing');
+    detailedTilesAvailable.current = false;
+    latest.current.onImageryStatusChange?.('fallback');
     setFatal('');
     try {
       instance = new Viewer(container.current!, {
@@ -46,9 +52,12 @@ export function EarthGlobe(props: EarthGlobeProps) {
       setViewer(v);
       v.scene.globe.baseColor = Color.fromCssColorString('#254c61');
       v.scene.globe.depthTestAgainstTerrain = true;
+      // Bundled Natural Earth has no city-scale tile pyramid.
+      v.scene.screenSpaceCameraController.minimumZoomDistance = 2_500_000;
       const initial = latest.current.initialCamera;
       if (initial) {
-        if (validCamera(initial)) aim(v, initial, false);
+        if (initial.eye && validCoordinates(initial.eye)) v.camera.setView({ destination: Cartesian3.fromDegrees(initial.eye.longitude, initial.eye.latitude, Math.max(2_500_000, initial.eye.heightMeters ?? 20_000_000)), orientation: { heading: CesiumMath.toRadians(initial.headingDegrees ?? 0), pitch: CesiumMath.toRadians(initial.pitchDegrees ?? -60), roll: 0 } });
+        else if (validCamera(initial)) aim(v, initial, false);
         else fail('INVALID_CAMERA', 'Initial camera contains invalid coordinates, range or angles.');
       } else v.camera.setView({ destination: Cartesian3.fromDegrees(20, 20, 20_000_000) });
       cleanups.push(v.scene.renderError.addEventListener(() => {
@@ -80,6 +89,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
         if (v.isDestroyed()) return;
         const cartographic = Cartographic.fromCartesian(v.camera.positionWC);
         latest.current.onCameraChange?.({
+          eye: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude), heightMeters: cartographic.height },
           center: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude), heightMeters: cartographic.height },
           rangeMeters: Math.max(1, cartographic.height),
           headingDegrees: CesiumMath.toDegrees(v.camera.heading),
@@ -109,17 +119,55 @@ export function EarthGlobe(props: EarthGlobeProps) {
         } catch { fail('FALLBACK_IMAGERY_FAILED', 'Bundled imagery is unavailable; check Cesium static asset hosting.'); }
         if (disposed) return;
         if (token && Number.isSafeInteger(imageryId) && imageryId > 0) {
+          latest.current.onImageryStatusChange?.('loading');
           try {
             const imagery = await IonImageryProvider.fromAssetId(imageryId, { accessToken: token });
             if (disposed) return;
+            detailCoverage.current = imagery.rectangle ?? null;
+            let receivedTile = false;
+            let imageryFailed = false;
+            const originalRequest = imagery.requestImage;
+            imagery.requestImage = function (...args: Parameters<typeof originalRequest>) {
+              const pending = originalRequest.apply(this, args);
+              if (!pending) return pending;
+              return Promise.resolve(pending).then(image => {
+                if (disposed) return image;
+                const discard = imagery.tileDiscardPolicy;
+                // Cesium's policy typing is narrower than its getImagePixels implementation.
+                const usable = image && (!discard || (discard.isReady() && !discard.shouldDiscardImage(image as HTMLImageElement)));
+                if (!disposed && usable) { receivedTile = true; v.scene.requestRender(); }
+                return image;
+              });
+            };
+            cleanups.push(() => { imagery.requestImage = originalRequest; });
             const layer = v.imageryLayers.addImageryProvider(imagery);
+            cleanups.push(v.scene.postRender.addEventListener(() => {
+              const selected = latest.current.selectedLocation;
+              if (selected && imagery.rectangle && !Rectangle.contains(imagery.rectangle, Cartographic.fromDegrees(selected.coordinates.longitude, selected.coordinates.latitude))) {
+                if (detailedTilesAvailable.current) detailedTilesAvailable.current = false;
+                v.scene.screenSpaceCameraController.minimumZoomDistance = 2_500_000;
+                latest.current.onImageryStatusChange?.('outside_coverage');
+                return;
+              }
+              if (!disposed && !imageryFailed && receivedTile && layer.show && v.scene.globe.tilesLoaded && !detailedTilesAvailable.current) {
+                detailedTilesAvailable.current = true;
+                v.scene.screenSpaceCameraController.minimumZoomDistance = 100;
+                latest.current.onImageryStatusChange?.('available');
+              }
+            }));
             cleanups.push(imagery.errorEvent.addEventListener(() => {
+              imageryFailed = true;
+              detailedTilesAvailable.current = false;
+              latest.current.onImageryStatusChange?.('failed');
+              v.scene.screenSpaceCameraController.minimumZoomDistance = 2_500_000;
+              const eye = v.camera.positionCartographic;
+              if (eye && eye.height < 2_500_000) v.camera.setView({ destination: Cartesian3.fromRadians(eye.longitude, eye.latitude, 5_000_000), orientation: { heading: v.camera.heading, pitch: -Math.PI / 2, roll: 0 } });
               layer.show = false;
               fail('ION_IMAGERY_FAILED', 'Ion imagery failed; showing bundled Natural Earth imagery.');
               v.scene.requestRender();
             }));
-          } catch { fail('ION_IMAGERY_FAILED', 'Ion imagery is unavailable; using bundled Natural Earth imagery.'); }
-        } else fail('ION_IMAGERY_UNCONFIGURED', 'Using low-resolution Natural Earth imagery. Configure an ion imagery asset for detailed imagery.');
+          } catch (error) { latest.current.onImageryStatusChange?.('failed'); fail('ION_IMAGERY_FAILED', imageryFailureMessage(error)); }
+        } else fail('ION_IMAGERY_UNCONFIGURED', 'Regional Natural Earth fallback: city detail is unavailable. Set VITE_CESIUM_ION_TOKEN and a permitted VITE_CESIUM_ION_IMAGERY_ASSET_ID in local Vite configuration, then restart Vite.');
         if (labelsConfigured && !disposed) {
           try {
             const labelsImagery = await IonImageryProvider.fromAssetId(labelsId, { accessToken: token });
@@ -131,6 +179,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
             cleanups.push(labelsImagery.errorEvent.addEventListener(() => {
               layer.show = false;
               labelsStatus('failed');
+              labelsLayer.current = null;
               fail('ION_LABELS_FAILED', 'Map labels failed to load; base imagery remains available.');
               v.scene.requestRender();
             }));
@@ -162,6 +211,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
           let reported = false;
           cleanups.push(v.scene.postRender.addEventListener(() => {
             if (!reported && !disposed && !broken && v.scene.globe.tilesLoaded) {
+              if (!degraded && !detailedTilesAvailable.current) return;
               reported = true;
               status(degraded ? 'degraded' : 'ready');
             }
@@ -178,7 +228,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
     return () => {
       if (instance && !instance.isDestroyed() && instance.camera.positionWC) {
         const cartographic = Cartographic.fromCartesian(instance.camera.positionWC);
-        latest.current.onCameraChange?.({ center: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude), heightMeters: cartographic.height }, rangeMeters: Math.max(1, cartographic.height), headingDegrees: CesiumMath.toDegrees(instance.camera.heading), pitchDegrees: CesiumMath.toDegrees(instance.camera.pitch) });
+        latest.current.onCameraChange?.({ eye: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude), heightMeters: cartographic.height }, center: { latitude: CesiumMath.toDegrees(cartographic.latitude), longitude: CesiumMath.toDegrees(cartographic.longitude) }, rangeMeters: Math.max(1, cartographic.height), headingDegrees: CesiumMath.toDegrees(instance.camera.heading), pitchDegrees: CesiumMath.toDegrees(instance.camera.pitch) });
       }
       disposed = true;
       cleanups.reverse().forEach(cleanup => cleanup());
@@ -232,6 +282,7 @@ export function EarthGlobe(props: EarthGlobeProps) {
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
+    if (restoreSelection.current) { restoreSelection.current = false; return; }
     viewer.camera.cancelFlight();
     const location = props.selectedLocation;
     if (!location) return;
@@ -239,10 +290,19 @@ export function EarthGlobe(props: EarthGlobeProps) {
       latest.current.onError?.({ code: 'INVALID_LOCATION', message: 'Selected location has invalid coordinates.' });
       return;
     }
-    const detailedImageryConfigured = !!import.meta.env.VITE_CESIUM_ION_TOKEN?.trim() && Number(import.meta.env.VITE_CESIUM_ION_IMAGERY_ASSET_ID) > 0;
-    aim(viewer, { center: location.coordinates, rangeMeters: detailedImageryConfigured ? 100_000 : 2_500_000 }, true);
+    const covered = !detailCoverage.current || Rectangle.contains(detailCoverage.current, Cartographic.fromDegrees(location.coordinates.longitude, location.coordinates.latitude));
+    aim(viewer, { center: location.coordinates, rangeMeters: detailedTilesAvailable.current && covered ? 100_000 : 5_000_000 }, true);
     latest.current.onLocationSelected?.(location);
   }, [viewer, props.selectedLocation]);
+
+  useEffect(() => {
+    if (!viewer || viewer.isDestroyed() || !props.fitRouteRequest || !props.routeGeoJSON?.coordinates.length) return;
+    if (handledFit.current === props.fitRouteRequest) return;
+    handledFit.current = props.fitRouteRequest;
+    const points = props.routeGeoJSON.coordinates.map(([lon, lat]) => Cartesian3.fromDegrees(lon, lat));
+    const sphere = BoundingSphere.fromPoints(points);
+    viewer.camera.flyToBoundingSphere(sphere, { duration: 0, offset: new HeadingPitchRange(0, -Math.PI / 2, Math.max(sphere.radius * 3, detailedTilesAvailable.current ? 1000 : 5_000_000)) });
+  }, [viewer, props.fitRouteRequest]);
 
   return <div style={{ width: '100%', height: '100%', minHeight: 320, position: 'relative' }}>
     <div ref={container} style={{ position: 'absolute', inset: 0 }} />
@@ -256,8 +316,21 @@ function validCamera(camera: GlobeCamera) {
     (camera.pitchDegrees === undefined || (Number.isFinite(camera.pitchDegrees) && camera.pitchDegrees >= -90 && camera.pitchDegrees <= 0));
 }
 
+export function imageryFailureMessage(error: unknown): string {
+  const code = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : undefined;
+  if (code === 401) return 'Imagery authentication failed. Check the local ion token. Regional fallback remains available.';
+  if (code === 403) return 'Imagery access denied. Check asset permissions and the allowed application URL. Regional fallback remains available.';
+  if (code === 404) return 'The imagery asset was not found or is unavailable to this token. Regional fallback remains available.';
+  if (code === 429) return 'The imagery service is rate-limited. Regional fallback remains available; try again later.';
+  return 'Detailed imagery could not load. Check the connection, ion token and imagery asset configuration, then reload. Regional fallback remains available.';
+}
+
 function aim(viewer: Viewer, camera: GlobeCamera, animate: boolean) {
   const c = camera.center;
+  if ((camera.rangeMeters ?? 10_000_000) >= 10_000_000) {
+    viewer.camera.setView({ destination: Cartesian3.fromDegrees(c.longitude, c.latitude, camera.rangeMeters ?? 20_000_000), orientation: { heading: CesiumMath.toRadians(camera.headingDegrees ?? 0), pitch: -Math.PI / 2, roll: 0 } });
+    return;
+  }
   viewer.camera.flyToBoundingSphere(new BoundingSphere(Cartesian3.fromDegrees(c.longitude, c.latitude, c.heightMeters ?? 0), 0), {
     duration: animate && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 1.5 : 0,
     offset: new HeadingPitchRange(CesiumMath.toRadians(camera.headingDegrees ?? 0), CesiumMath.toRadians(camera.pitchDegrees ?? -60), camera.rangeMeters ?? 10_000_000),
