@@ -173,3 +173,15 @@ it('does not recreate providers on camera or marker changes and ignores late ini
   expect(mock.viewers[0].imageryLayers.layers).toHaveLength(1);
   expect(mock.terrain).not.toHaveBeenCalled();
 });
+
+it('shows the selected-place label and limits distant POI dots without recreating the viewer', async () => {
+ const place = { id: 'selected', name: 'Chosen point', coordinates: { latitude: 12, longitude: 34 } };
+ const marker = { id: 'other', label: 'Other place', coordinates: { latitude: 12.1, longitude: 34.1 } };
+ const view = render(<EarthGlobe selectedLocation={place} markers={[marker]} />);
+ await waitFor(() => expect(mock.viewers[0].entities.add).toHaveBeenCalledWith(expect.objectContaining({ id: 'marker:selected' })));
+ const calls = mock.viewers[0].entities.add.mock.calls.map((args: any[]) => args[0]);
+ const selected = calls.find((entity: any) => entity.id === 'marker:selected');
+ const other = calls.find((entity: any) => entity.id === 'marker:other');
+ expect(selected.label.show).toBe(true); expect(other.label.show).toBe(false); expect(other.point.distanceDisplayCondition.far).toBe(500000);
+ view.rerender(<EarthGlobe selectedLocation={null} markers={[marker]} />); expect(mock.viewers).toHaveLength(1);
+});

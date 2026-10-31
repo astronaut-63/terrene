@@ -90,3 +90,25 @@ class PlacesTests(unittest.IsolatedAsyncioTestCase):
             response.post = AsyncMock(return_value=type('Response', (), {'status_code': 200, 'raise_for_status': lambda self: None, 'json': lambda self: {'elements': [{'type': 'node', 'id': 1, 'lat': 19, 'lon': 72, 'tags': {'name': 'Valid'}}, {'type': 'node', 'id': 2, 'tags': {}}]}})())
             result = await nearby(19, 76, 'tourism', 1000)
             self.assertEqual([place['name'] for place in result['results']], ['Valid'])
+
+    async def test_corridor_all_failed_is_unavailable(self):
+        with patch('backend.places.nearby', AsyncMock(side_effect=HTTPException(504, 'Timeout'))):
+            with self.assertRaises(HTTPException) as error:
+                await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.01, 'longitude': 72.01}]))
+        self.assertEqual(error.exception.status_code, 503)
+
+    async def test_corridor_empty_success_is_not_failure(self):
+        with patch('backend.places.nearby', AsyncMock(return_value={'results': []})):
+            result = await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.01, 'longitude': 72.01}]))
+        self.assertEqual(result['status'], 'ok')
+        self.assertEqual(result['failed_samples'], 0)
+        self.assertEqual(result['results'], [])
+
+    async def test_corridor_partial_failure_is_explicit(self):
+        with patch('backend.places.nearby', AsyncMock(side_effect=[{'results': [{'id': 'kept'}]}, HTTPException(503, 'Unavailable')])):
+            result = await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.001, 'longitude': 72.001}]))
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual(result['failed_samples'], 1)
+        self.assertEqual(result['successful_samples'], 1)
+        self.assertEqual(result['results'], [{'id': 'kept'}])
+        self.assertTrue(result['warning'])

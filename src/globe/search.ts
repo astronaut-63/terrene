@@ -1,3 +1,4 @@
+import { errorMessage } from '../services/apiClient';
 import { Cartesian3, Cartographic, GeocoderService, IonGeocoderService, Math as CesiumMath, Rectangle } from 'cesium';
 import type { Viewer } from 'cesium';
 import type { GeographicLocation, LocationSearch } from './contracts';
@@ -55,7 +56,7 @@ export const searchLocations: LocationSearch = async (query, signal) => {
   }
   let body: { results?: GeographicLocation[]; error?: string };
   try { body = await response.json(); } catch { throw new Error('Location search returned invalid data.'); }
-  if (!response.ok) throw new Error(body.error ?? 'Location search failed.');
+  if (!response.ok) throw new Error(errorMessage(body, 'Location search failed.'));
   if (!Array.isArray(body.results)) throw new Error('Location search returned invalid data.');
   return body.results;
 };

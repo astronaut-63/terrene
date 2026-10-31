@@ -1,25 +1,34 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Place, RouteGeoJSON } from './domain/geo';
-export type DiscoveredPlace = Place & {metadata?: Record<string,string>; accessibility?: string};
-const presets: Record<string,string[]> = {General:['tourism','nature'], Student:['education','food'], 'Senior Citizen':['health','nature','public'], Health:['health'], Accessibility:['accessibility','public']};
-export function Discovery({selected, route, onPlaces, onSelect}: {selected: Place|null; route: RouteGeoJSON|null; onPlaces:(p:Place[])=>void; onSelect:(p:Place)=>void}) {
-  const [categories,setCategories] = useState(['tourism','nature']);
-  const [places,setPlaces] = useState<DiscoveredPlace[]>([]);
-  const [message,setMessage] = useState('');
-  const [busy,setBusy] = useState(false);
-  async function discover(along=false) {
-    if (!selected || !categories.length) return;
-    setBusy(true); setMessage('Discovering mapped places…');
+import { apiRequest, jsonRequest, messageOf } from './services/apiClient';
+import type { DiscoveryResult } from './services/apiContracts';
+import { Feedback } from './ui/Feedback';
+export type DiscoveredPlace = Place;
+const presets: Record<string, string[]> = { General: ['tourism', 'nature'], Student: ['education', 'food'], 'Senior Citizen': ['health', 'nature', 'public'], Health: ['health'], Accessibility: ['accessibility', 'public'] };
+const categoryNames: Record<string, string> = { tourism: 'Tourism', nature: 'Nature', education: 'Education', health: 'Health', food: 'Food', hotels: 'Hotels', public: 'Public facilities', accessibility: 'Accessibility' };
+export function Discovery({ selected, route, onPlaces, onSelect }: { selected: Place | null; route: RouteGeoJSON | null; onPlaces: (p: Place[]) => void; onSelect: (p: Place) => void }) {
+  const [categories, setCategories] = useState(['tourism', 'nature']); const [preset, setPreset] = useState('General');
+  const [places, setPlaces] = useState<Place[]>([]); const [message, setMessage] = useState(''); const [error, setError] = useState(false);
+  const [busy, setBusy] = useState(false); const [queried, setQueried] = useState(false); const [contextName, setContextName] = useState('');
+  const request = useRef<AbortController | null>(null);
+  useEffect(() => () => request.current?.abort(), []);
+  useEffect(() => { request.current?.abort(); setBusy(false); setMessage(current => current === 'Discovering mapped places…' ? 'Search cancelled because the map context changed. Search again for this location.' : current); }, [selected?.coordinates.latitude, selected?.coordinates.longitude, route]);
+  function invalidate() { request.current?.abort(); setBusy(false); setPlaces([]); setQueried(false); setMessage(''); onPlaces([]); }
+  async function discover(along = false) {
+    if ((!along && !selected) || (along && !route) || !categories.length) return;
+    invalidate(); const controller = new AbortController(); request.current = controller; setBusy(true); setError(false); setMessage('Discovering mapped places…');
+    setContextName(along ? 'the active route' : selected!.name);
     try {
-      let r:Response;
+      let data: DiscoveryResult;
       if (along && route) {
-        const points = Array.from({length:5},(_,i)=>route.coordinates[Math.round(i*(route.coordinates.length-1)/4)]).map(([longitude,latitude])=>({latitude,longitude}));
-        r = await fetch('/api/v1/places/along-route',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({points,categories:categories.join(',')})});
-      } else r = await fetch(`/api/v1/places/nearby?latitude=${selected.coordinates.latitude}&longitude=${selected.coordinates.longitude}&categories=${categories.join(',')}`);
-      const data=await r.json(); if(!r.ok) throw new Error(typeof data.detail==='string'?data.detail:'Discovery failed.');
-      setPlaces(data.results); onPlaces(data.results); setMessage(`${data.results.length} places · ${data.attribution}. ${data.coverage??''}`);
-    } catch(e) {setMessage(String(e));} finally {setBusy(false);}
+        const points = Array.from({ length: 5 }, (_, i) => route.coordinates[Math.round(i * (route.coordinates.length - 1) / 4)]).map(([longitude, latitude]) => ({ latitude, longitude }));
+        data = await apiRequest('/api/v1/places/along-route', jsonRequest({ points, categories: categories.join(',') }, controller.signal));
+      } else data = await apiRequest('/api/v1/places/nearby?latitude=' + selected!.coordinates.latitude + '&longitude=' + selected!.coordinates.longitude + '&categories=' + categories.join(','), { signal: controller.signal });
+      if (!Array.isArray(data.results)) throw new Error('Discovery returned invalid data.');
+      if (controller.signal.aborted) return; setPlaces(data.results); onPlaces(data.results); setQueried(true); setMessage(data.results.length + ' places. ' + (data.warning ?? '') + ' ' + (data.coverage ?? 'Nearby search within 1.5 km; coverage depends on mapped data.'));
+    } catch (e) { if (!controller.signal.aborted) { setError(true); setMessage(messageOf(e)); } }
+    finally { if (request.current === controller && !controller.signal.aborted) setBusy(false); }
   }
-  const detail=selected as DiscoveredPlace|null;
-  return <aside className="panel"><h2>Explore nearby</h2><label>Viewing mode<select onChange={e=>{setCategories(presets[e.target.value]);setPlaces([]);onPlaces([]);}}>{Object.keys(presets).map(p=><option key={p}>{p}</option>)}</select></label><fieldset><legend>Place categories</legend>{['tourism','nature','education','health','food','hotels','public','accessibility'].map(c=><label key={c}><input type="checkbox" checked={categories.includes(c)} onChange={e=>{setCategories(e.target.checked?[...categories,c]:categories.filter(x=>x!==c));setPlaces([]);onPlaces([]);}} />{c}</label>)}</fieldset><button disabled={busy||!selected||!categories.length} onClick={()=>discover()}>Discover nearby</button><button disabled={busy||!selected||!route||!categories.length} onClick={()=>discover(true)}>Discover along route</button><button onClick={()=>onPlaces([])}>Hide POI markers</button><p role="status">{message}</p><ul>{places.map(p=><li key={p.id}><button onClick={()=>onSelect(p)}>{p.name}</button></li>)}</ul>{detail?.metadata&&<section><h3>{detail.name}</h3><p>Wheelchair access: {detail.accessibility??'unknown'}</p><p>Published opening hours: {detail.metadata.opening_hours??'Not provided'}</p><p>Schedule only; exceptional closures may be unrecorded.</p>{['website','phone','addr:street','wheelchair:description'].map(k=>detail.metadata?.[k]&&<p key={k}>{k}: {detail.metadata[k]}</p>)}</section>}</aside>;
+  return <aside className="panel" aria-label="Discover places"><p className="eyebrow">OpenStreetMap places</p><h2>Discover places</h2><p className="hint">Find mapped places near a selected point or along your active route.</p><label>Category preset<select value={preset} onChange={e => { invalidate(); setPreset(e.target.value); setCategories(presets[e.target.value]); }}>{Object.keys(presets).map(p => <option key={p}>{p}</option>)}</select></label><p className="hint">Presets select categories. They do not personalise routing or rank recommendations.</p><fieldset className="category-grid"><legend>Place categories</legend>{Object.entries(categoryNames).map(([key, label]) => <label key={key}><input type="checkbox" checked={categories.includes(key)} onChange={e => { invalidate(); setCategories(e.target.checked ? [...categories, key] : categories.filter(x => x !== key)); }} />{label}</label>)}</fieldset><div className="button-row"><button disabled={busy || !selected || !categories.length} onClick={() => discover()}>Discover nearby</button><button className="quiet" disabled={busy || !route || !categories.length} onClick={() => discover(true)}>Along route</button></div><Feedback message={message} error={error} busy={busy} />{queried && <p className="field-caption">Results around {contextName}</p>}{queried && !places.length && <p className="empty-state">No mapped places matched these categories in the searched area.</p>}<ul className="results">{places.map(p => <li key={p.id}><button aria-pressed={selected?.id === p.id} onClick={() => onSelect(p)}><strong>{p.name}</strong><span>{p.metadata?.tourism ?? p.metadata?.amenity ?? p.metadata?.leisure ?? 'Mapped place'}</span></button></li>)}</ul>{places.length > 0 && <button className="text-button" onClick={() => onPlaces([])}>Hide POI markers</button>}
+    {selected?.metadata && <section className="result-block"><h3>{selected.name}</h3><p>Wheelchair access: {(selected.accessibility ?? 'unknown').replaceAll('_', ' ')}</p><p>Published opening hours: {selected.metadata.opening_hours ?? 'Not provided'}</p>{['website', 'phone', 'addr:street', 'wheelchair:description'].map(k => selected.metadata?.[k] && <p className="metadata-row" key={k}>{k.replaceAll('_', ' ')}: {selected.metadata[k]}</p>)}</section>}<p className="footnote">Published data may be incomplete. Accessibility tags and schedules do not guarantee current conditions.</p><p className="source">© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a> · <a href="https://wiki.openstreetmap.org/wiki/Overpass_API">Overpass</a></p></aside>;
 }

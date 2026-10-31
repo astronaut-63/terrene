@@ -13,7 +13,7 @@ function Demo() {
     <div style={{height: '80%'}}><EarthGlobe markers={markers} selectedLocation={selected} onStatusChange={setStatus}
       onError={error => setMessage(error.message)} onMarkerSelected={id => setMessage(`Selected marker ${id}`)}
       onCoordinatesSelected={coordinates => { setMessage(`${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)}`); setMarkers([{id: 'picked', label: 'Selected point', coordinates}]); }} /></div>
-    <div style={{padding: 12}}><strong>{status}</strong> — {message}
+    <div style={{padding: 12}}><strong>{status}</strong> · {message}
       <form onSubmit={async event => {event.preventDefault(); const query = new FormData(event.currentTarget).get('query') as string; try {setResults(await searchLocations(query));} catch(error) {setMessage((error as Error).message);} }}>
         <input name="query" aria-label="Location" placeholder="Search a place" /><button>Search</button>
       </form>

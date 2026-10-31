@@ -50,3 +50,38 @@ class ItineraryTests(unittest.TestCase):
         self.assertEqual(client.post('/api/v1/itineraries/generate', json={**self.payload, 'stops': []}).status_code, 422)
         with patch('backend.itineraries.route', new=AsyncMock(side_effect=HTTPException(502, 'provider'))):
             self.assertEqual(client.post('/api/v1/itineraries/generate', json=self.payload).status_code, 503)
+
+    def test_break_is_included_in_stop_admission(self):
+        payload = {**self.payload, 'available_minutes': 45}
+        with patch('backend.itineraries.route', new=AsyncMock(return_value=leg())):
+            response = TestClient(app).post('/api/v1/itineraries/generate', json=payload)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertLessEqual(body['total_duration_minutes'], 45)
+        self.assertEqual(body['omitted_stops'][0]['id'], 'museum')
+        self.assertEqual(body['omitted_stops'][0]['reason'], 'time_budget_exceeded')
+
+    def test_final_destination_budget_omission_is_partial(self):
+        payload = {**self.payload, 'available_minutes': 55, 'stops': self.payload['stops'][:1]}
+        with patch('backend.itineraries.route', new=AsyncMock(side_effect=[leg(), leg(duration=1200)])):
+            response = TestClient(app).post('/api/v1/itineraries/generate', json=payload)
+        body = response.json()
+        self.assertEqual(body['status'], 'partial')
+        self.assertEqual(body['destination_status'], 'omitted')
+        self.assertEqual(body['destination_omission'], 'time_budget_exceeded')
+        self.assertLessEqual(body['total_duration_minutes'], 55)
+
+    def test_final_destination_provider_omission_is_partial(self):
+        payload = {**self.payload, 'stops': self.payload['stops'][:1]}
+        with patch('backend.itineraries.route', new=AsyncMock(side_effect=[leg(), HTTPException(503, 'Unavailable')])):
+            body = TestClient(app).post('/api/v1/itineraries/generate', json=payload).json()
+        self.assertEqual(body['status'], 'partial')
+        self.assertEqual(body['destination_omission'], 'route_unavailable')
+
+    def test_exact_budget_includes_break_and_final_travel(self):
+        payload = {**self.payload, 'available_minutes': 60, 'stops': self.payload['stops'][:1]}
+        with patch('backend.itineraries.route', new=AsyncMock(return_value=leg())):
+            body = TestClient(app).post('/api/v1/itineraries/generate', json=payload).json()
+        self.assertEqual(body['total_duration_minutes'], 60)
+        self.assertEqual(body['destination_status'], 'included')
+        self.assertEqual(body['status'], 'ok')

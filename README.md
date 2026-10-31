@@ -1,3 +1,17 @@
+## Current frontend workspace, 31 October 2026
+
+The application opens in the 2D map with persistent search and a collapsible tool sidebar. Routes, journeys and itineraries have separate route ownership; selection and camera context remain shared. Feature inputs survive navigation. Legal draft pages are at `/privacy` and `/terms`; the initial favicon is installed.
+
+The frontend uses `src/services/apiClient.ts` and typed contracts. Keep the existing FastAPI backend `backend.main:app` running on port 3002 in a separate process; `npm run dev` starts only Vite. The compatibility Node server is not the canonical API backend.
+
+Run `npm test`, `npm run typecheck` and `npm run build`. `npm run check:launch` intentionally fails until the domain and external release gates are completed. No deployment is authorized by this implementation.
+
+- [Implementation and actual verification report](docs/FRONTEND_REPORT.md)
+- [Production routing and launch gates](docs/PRODUCTION.md)
+- [Provider integration review](docs/PROVIDER_REVIEW.md)
+
+The historical sections below describe earlier stages; use the report above for the current status.
+
 # Terrene
 
 Backend migration in progress: Vite now proxies all `/api` requests to FastAPI on port 3002. Start `python -m uvicorn backend.main:app --port 3002` after installing `backend/requirements-dev.txt` and running `python -m alembic upgrade head`. Add backend credentials to the repository-root `.env` file and restart FastAPI. The older Node startup instructions below are retained as historical documentation; Node is no longer required by the current proxy. See [implementation status and current setup](IMPLEMENTATION_STATUS.md) for the exact completed scope and outstanding work.
@@ -61,6 +75,11 @@ Integration verification: `npm test` runs 5 engine logic tests plus 4 shell inte
 The 2D map uses the public OpenFreeMap Liberty style by default. It is a vector map service for development and demos, not an unrestricted production tile guarantee; review its availability, attribution, usage limits and terms before deployment. Override it with `VITE_MAP_STYLE_URL` when using another compatible style or a self-hosted provider.
 
 ## Setup
+
+On Windows, the included batch files automate the setup below. Double-click
+`setup.bat` once, then run `start.bat` whenever you want to launch the local
+API and frontend. The launcher opens the FastAPI service on port 3002 and Vite
+on port 5173 in separate Command Prompt windows.
 
 ```sh
 npm ci

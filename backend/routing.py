@@ -51,7 +51,7 @@ def normalize_geometry(geometry):
         if not isinstance(coordinate, (list, tuple)) or len(coordinate) < 2:
             raise ValueError('Invalid route coordinate')
         longitude, latitude = float(coordinate[0]), float(coordinate[1])
-        if not math.isfinite(longitude) or not math.isfinite(latitude):
+        if not math.isfinite(longitude) or not math.isfinite(latitude) or not -180 <= longitude <= 180 or not -90 <= latitude <= 90:
             raise ValueError('Invalid route coordinate')
         coordinates.append([longitude, latitude])
     return {'type': 'LineString', 'coordinates': coordinates}
@@ -76,7 +76,10 @@ async def route(request: RouteRequest):
         feature = data['features'][0]
         summary = feature['properties']['summary']
         geometry = normalize_geometry(feature['geometry'])
-        return {'geometry': geometry, 'distance_m': summary['distance'], 'distance_km': summary['distance'] / 1000, 'duration_seconds': summary['duration'], 'bbox': data.get('bbox'), 'instructions': feature['properties'].get('segments', []), 'attribution': 'openrouteservice | © OpenStreetMap contributors', 'accessibility': 'unknown' if request.mode == 'wheelchair' else 'not_assessed', 'limitations': 'Estimated duration is not traffic-aware. Accessibility depends on mapped data and is not guaranteed.'}
+        distance, duration = float(summary['distance']), float(summary['duration'])
+        if isinstance(summary['distance'], bool) or isinstance(summary['duration'], bool) or not math.isfinite(distance) or not math.isfinite(duration) or distance < 0 or duration < 0:
+            raise ValueError('Invalid route summary')
+        return {'geometry': geometry, 'distance_m': distance, 'distance_km': distance / 1000, 'duration_seconds': duration, 'bbox': data.get('bbox'), 'instructions': feature['properties'].get('segments', []), 'attribution': 'openrouteservice by HeiGIT | © OpenStreetMap contributors', 'accessibility': 'unknown' if request.mode == 'wheelchair' else 'not_assessed', 'limitations': 'Estimated duration is not traffic-aware. Accessibility depends on mapped data and is not guaranteed.'}
     except httpx.TimeoutException:
         raise HTTPException(504, 'Routing provider timed out.')
     except (httpx.HTTPError, KeyError, IndexError, ValueError, TypeError):

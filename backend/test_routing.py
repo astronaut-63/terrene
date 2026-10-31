@@ -80,3 +80,17 @@ class RoutingTests(unittest.TestCase):
             response = client.get('/api/v1/ready')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()['routing_provider']['configured'])
+
+    def test_invalid_geographic_coordinates_are_rejected(self):
+        for coordinates in [[[181, 0], [0, 0]], [[0, 91], [0, 0]], [['NaN', 1], [0, 0]]]:
+            with self.assertRaises(ValueError):
+                normalize_geometry({'type': 'LineString', 'coordinates': coordinates})
+
+    def test_invalid_provider_summary_cannot_be_displayed_as_a_route(self):
+        client = TestClient(app)
+        with patch.dict(os.environ, {'HEIGIT_API_KEY': 'test-key'}), patch('backend.routing.httpx.AsyncClient', FakeClient):
+            for summary in [{'distance': -1, 'duration': 60}, {'distance': 10, 'duration': 'nan'}, {'distance': True, 'duration': 60}]:
+                FakeClient.response = FakeResponse(200, {'features': [{'properties': {'summary': summary}, 'geometry': {'type': 'LineString', 'coordinates': [[72, 19], [73, 18]]}}]})
+                response = client.post('/api/v1/routes', json=PAYLOAD)
+                self.assertEqual(response.status_code, 502)
+                self.assertNotIn('test-key', response.text)

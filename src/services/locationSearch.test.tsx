@@ -17,3 +17,9 @@ it('distinguishes provider errors and malformed successful responses', async () 
   await expect(searchLocations('Mumbai')).rejects.toThrow('rate-limited');
   await expect(searchLocations('Mumbai')).rejects.toThrow('unexpected response structure');
 });
+
+it('shows FastAPI detail errors and supports a legacy message response', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(new Response(JSON.stringify({ detail: 'Search provider timed out.' }), { status: 504 })).mockResolvedValueOnce(new Response(JSON.stringify({ message: 'Try later.' }), { status: 503 })));
+  await expect(searchLocations('Delhi')).rejects.toThrow('Search provider timed out.');
+  await expect(searchLocations('Delhi')).rejects.toThrow('Try later.');
+});
