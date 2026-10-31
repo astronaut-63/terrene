@@ -30,6 +30,21 @@ class FakeClient:
         return type(self).response
 
 class RoutingTests(unittest.TestCase):
+    def test_network_timeout_and_malformed_data_have_distinct_safe_errors(self):
+        import httpx
+        from unittest.mock import AsyncMock
+        client = TestClient(app)
+        with patch.dict(os.environ, {'HEIGIT_API_KEY': 'private-test-key'}), patch('backend.routing.httpx.AsyncClient', FakeClient):
+            for failure, status, detail in [
+                (httpx.ConnectError('private-test-key'), 502, 'could not be reached'),
+                (httpx.ReadTimeout('private-test-key'), 504, 'timed out'),
+            ]:
+                with patch.object(FakeClient, 'post', AsyncMock(side_effect=failure)):
+                    response = client.post('/api/v1/routes', json=PAYLOAD)
+                    self.assertEqual(response.status_code, status)
+                    self.assertIn(detail, response.json()['detail'])
+                    self.assertNotIn('private-test-key', response.text)
+
     def test_order_and_wheelchair(self):
         request = RouteRequest(origin={'latitude': 19, 'longitude': 72}, destination={'latitude': 18, 'longitude': 73}, mode='wheelchair')
         body = provider_body(request)

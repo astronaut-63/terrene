@@ -1,5 +1,5 @@
 import type { RouteGeoJSON } from '../domain/geo';
-export type RouteOwner = 'route' | 'journey' | 'itinerary';
+export type RouteOwner = 'route' | 'journey' | 'itinerary' | 'city';
 export interface RouteSession { routes: Partial<Record<RouteOwner, RouteGeoJSON>>; active: RouteOwner | null }
 export type RouteAction = { type: 'set'; owner: RouteOwner; geometry: RouteGeoJSON | null; activate?: boolean } | { type: 'activate'; owner: RouteOwner };
 export const initialRouteSession: RouteSession = { routes: {}, active: null };

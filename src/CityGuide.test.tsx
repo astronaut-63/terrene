@@ -1,0 +1,32 @@
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, expect, it, vi } from 'vitest';
+import { CityGuide } from './CityGuide';
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+const city = { id: 'mumbai', name: 'Mumbai', country: 'India', center: { latitude: 19.055, longitude: 72.869 }, timezone: 'Asia/Kolkata', coverage: 'Pilot extent', source: 'OSM' };
+it('synchronizes recommendations with markers, clears edited geometry and transfers the reviewed selection', async () => {
+ const place = { id: 'fixture', name: 'Fixture museum', coordinates: city.center, category: 'museum', rank: 1, score: 25, reasons: ['Museum classification'], visit_minutes: 60, travel_minutes: 20, opening_status: 'not_provided', feasibility: 'fits' };
+ const geometry = { type: 'LineString', coordinates: [[72.86, 19.05], [72.87, 19.06]] };
+ vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.endsWith('/supported') ? { cities: [city] } : { city, recommendations: [place], selected: [place], origin: city.center, travel_minutes: 20, visit_minutes: 60, buffer_minutes: 10, total_minutes: 90, remaining_minutes: 30, geometry, warnings: [], attribution: 'OSM test fixture' } })));
+ const onPlaces = vi.fn(), onSelect = vi.fn(), onRoute = vi.fn(), onTransfer = vi.fn();
+ render(<CityGuide autoSuggest={false} selected={null} onSelect={onSelect} onPlaces={onPlaces} onRoute={onRoute} onFit={vi.fn()} onTransfer={onTransfer} />);
+ fireEvent.click(await screen.findByText('Mumbai, India'));
+ fireEvent.change(screen.getByLabelText('Visit date and start time (browser timezone)'), { target: { value: '2026-11-01T09:00' } });
+ fireEvent.click(screen.getByText('Generate city guide')); await screen.findByText('Attractions by evidence priority');
+ expect(onRoute).toHaveBeenLastCalledWith(geometry); expect(onPlaces).toHaveBeenLastCalledWith([expect.objectContaining({ priority: 1 })]);
+ fireEvent.click(screen.getByRole('button', { name: /^1\. Fixture museum/ })); expect(onSelect).toHaveBeenLastCalledWith(place);
+ fireEvent.click(screen.getByText('Exclude')); fireEvent.click(screen.getByText('Include for itinerary review'));
+ fireEvent.change(screen.getByLabelText('Estimated visit minutes for Fixture museum'), { target: { value: '20' } });
+ expect(onRoute).toHaveBeenLastCalledWith(null);
+ fireEvent.click(screen.getByText('Review in Itinerary'));
+ expect(onTransfer.mock.calls[0][0]).toMatchObject({ availableMinutes: 120, bufferMinutes: 10, mode: 'walking', stops: [{ id: 'fixture', visitMinutes: 20 }] });
+});
+it('reports provider failure without manufacturing attractions and retains the selected city', async () => {
+ vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: url.endsWith('/supported'), headers: new Headers({ 'content-type': 'application/json' }), json: async () => url.endsWith('/supported') ? { cities: [city] } : { detail: 'Attraction provider timed out.' } })));
+ render(<CityGuide autoSuggest={false} selected={null} onSelect={vi.fn()} onPlaces={vi.fn()} onRoute={vi.fn()} onFit={vi.fn()} onTransfer={vi.fn()} />);
+ fireEvent.click(await screen.findByText('Mumbai, India'));
+ fireEvent.change(screen.getByLabelText('Visit date and start time (browser timezone)'), { target: { value: '2026-11-01T09:00' } });
+ fireEvent.click(screen.getByText('Generate city guide'));
+ expect((await screen.findByRole('alert')).textContent).toContain('timed out');
+ expect((screen.getByLabelText('City Guide city') as HTMLInputElement).value).toBe('Mumbai');
+ expect(screen.queryByText('Attractions by evidence priority')).toBeNull();
+});

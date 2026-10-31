@@ -4,6 +4,18 @@ import { ItineraryPlanner } from './ItineraryPlanner';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+it('requires confirmation before importing a City Guide and preserves its order, duration and budget', () => {
+ const origin = { id: 'o', name: 'City centre', coordinates: { latitude: 19, longitude: 72 } };
+ const draft = { origin, stops: [{ ...origin, id: 'b', name: 'Second-ranked selection', visitMinutes: 45 }, { ...origin, id: 'a', name: 'First-ranked selection', visitMinutes: 20 }], departure: '2026-11-01T09:00', mode: 'walking' as const, availableMinutes: 240, bufferMinutes: 10 };
+ render(<ItineraryPlanner selected={null} poiPlaces={[]} onRoute={vi.fn()} guideDraft={draft} />);
+ expect((screen.getByLabelText('Itinerary start') as HTMLInputElement).value).toBe('');
+ fireEvent.click(screen.getByText('Import City Guide selection'));
+ expect((screen.getByLabelText('Stop 1') as HTMLInputElement).value).toBe('Second-ranked selection');
+ expect((screen.getByLabelText('Visit minutes for Second-ranked selection') as HTMLInputElement).value).toBe('45');
+ expect((screen.getByLabelText('Available minutes') as HTMLInputElement).value).toBe('240');
+ expect((screen.getByLabelText('Itinerary travel mode') as HTMLSelectElement).value).toBe('walking');
+});
+
 it('keeps a generated itinerary visible when persistence fails and reports the failure', async () => {
   const point = { latitude: 12, longitude: 34 };
   vi.stubGlobal('fetch', vi.fn(async (url: string) => {

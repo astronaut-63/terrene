@@ -22,12 +22,15 @@ if errorlevel 1 (
 set "PYTHON="
 where py >nul 2>&1
 if not errorlevel 1 (
-  py -3 -c "import sys" >nul 2>&1
+  py -3 -c "import sys; sys.exit(sys.version_info < (3,11))" >nul 2>&1
   if not errorlevel 1 set "PYTHON=py -3"
 )
 if not defined PYTHON (
   where python >nul 2>&1
-  if not errorlevel 1 set "PYTHON=python"
+  if not errorlevel 1 (
+    python -c "import sys; sys.exit(sys.version_info < (3,11))" >nul 2>&1
+    if not errorlevel 1 set "PYTHON=python"
+  )
 )
 if not defined PYTHON (
   echo [Terrene] Python 3 was not found. Install Python 3.11+ and run setup again.
@@ -70,6 +73,11 @@ if errorlevel 1 (
 if not exist ".env" (
   echo [Terrene] Creating .env from .env.example. Add provider keys only if you have them.
   copy /Y ".env.example" ".env" >nul
+  if errorlevel 1 (
+    echo [Terrene] Could not create .env.
+    set "SETUP_ERROR=1"
+    goto :finish
+  )
 )
 
 echo [Terrene] Applying database migrations...

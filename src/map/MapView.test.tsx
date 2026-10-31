@@ -38,7 +38,7 @@ it('initializes a flat Liberty map, disables rotation, and cleans up', async () 
   expect(map.options.pitch).toBe(0); expect(map.options.bearing).toBe(0);
   expect(map.dragRotate.disable).toHaveBeenCalled(); expect(map.touchZoomRotate.disableRotation).toHaveBeenCalled();
   map.events.load();
-  await waitFor(() => expect(map.layers.map((layer: any) => layer.id)).toEqual(['terrene-place-halo', 'terrene-places', 'terrene-route', 'terrene-clusters', 'terrene-cluster-count', 'terrene-selection']));
+  await waitFor(() => expect(map.layers.map((layer: any) => layer.id)).toEqual(['terrene-place-halo', 'terrene-places', 'terrene-route', 'terrene-clusters', 'terrene-cluster-count', 'terrene-selection', 'terrene-priorities']));
   view.unmount(); expect(map.remove).toHaveBeenCalled();
 });
 

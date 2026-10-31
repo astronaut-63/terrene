@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from '../ui/Icon';
-export type Feature = 'explore' | 'route' | 'journey' | 'itinerary' | 'discover' | 'saved' | 'trips' | 'sun' | 'clock' | 'settings';
+export type Feature = 'explore' | 'city' | 'route' | 'journey' | 'itinerary' | 'discover' | 'saved' | 'trips' | 'sun' | 'clock' | 'settings';
 export const features: Array<{ id: Feature; label: string; icon: IconName; short: string }> = [
   { id: 'explore', label: 'Explore', icon: 'explore', short: 'Explore' },
+  { id: 'city', label: 'City Guide', icon: 'discover', short: 'City' },
   { id: 'route', label: 'Route planning', icon: 'route', short: 'Route' },
   { id: 'journey', label: 'Journey simulation', icon: 'journey', short: 'Journey' },
   { id: 'itinerary', label: 'Itinerary planning', icon: 'itinerary', short: 'Plan' },

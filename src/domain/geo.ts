@@ -5,6 +5,7 @@ export interface GeoCoordinates {
 }
 
 export interface Place {
+  priority?: number;
   id: string;
   name: string;
   displayName?: string;

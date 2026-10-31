@@ -15,6 +15,7 @@ interface MapViewProps {
   savedPlaces: Place[];
   routeGeoJSON: RouteGeoJSON | null;
   fitRouteRequest?: number;
+  fitPlacesRequest?: number;
   onCameraChange: (camera: MapCamera2D) => void;
   onPlaceSelected: (place: Place) => void;
   onError?: (message: string) => void;
@@ -27,12 +28,12 @@ function placesGeoJSON(places: Place[], selectedId: string | null) {
     features: places.map(place => ({
       type: 'Feature' as const,
       geometry: { type: 'Point' as const, coordinates: [place.coordinates.longitude, place.coordinates.latitude] },
-      properties: { id: place.id, name: place.name, selected: place.id === selectedId },
+      properties: { id: place.id, name: place.name, selected: place.id === selectedId, priority: place.priority ?? '' },
     })),
   };
 }
 
-export function MapView({ camera, selectedPlace, savedPlaces, routeGeoJSON, fitRouteRequest = 0, onCameraChange, onPlaceSelected, onError, onStatusChange }: MapViewProps) {
+export function MapView({ camera, selectedPlace, savedPlaces, routeGeoJSON, fitRouteRequest = 0, fitPlacesRequest = 0, onCameraChange, onPlaceSelected, onError, onStatusChange }: MapViewProps) {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const latest = useRef({ camera, selectedPlace, savedPlaces, routeGeoJSON, onCameraChange, onPlaceSelected, onError, onStatusChange });
@@ -69,6 +70,7 @@ export function MapView({ camera, selectedPlace, savedPlaces, routeGeoJSON, fitR
       map.addLayer({ id: 'terrene-clusters', type: 'circle', source: 'terrene-places', filter: ['has', 'point_count'], paint: { 'circle-color': forestColor, 'circle-radius': 16, 'circle-stroke-width': 2, 'circle-stroke-color': '#fbfaf6' } });
       map.addLayer({ id: 'terrene-cluster-count', type: 'symbol', source: 'terrene-places', filter: ['has', 'point_count'], layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-font': ['Noto Sans Regular'], 'text-size': 11 }, paint: { 'text-color': '#fbfaf6' } });
       map.addLayer({ id: 'terrene-selection', type: 'circle', source: 'terrene-selection', paint: { 'circle-radius': 7, 'circle-color': routeColor, 'circle-stroke-width': 2, 'circle-stroke-color': '#fbfaf6' } });
+      map.addLayer({ id: 'terrene-priorities', type: 'symbol', source: 'terrene-places', filter: ['all', ['!', ['has', 'point_count']], ['!=', ['get', 'priority'], '']], layout: { 'text-field': ['to-string', ['get', 'priority']], 'text-size': 12, 'text-font': ['Noto Sans Regular'], 'text-offset': [0, -1.3] }, paint: { 'text-color': forestColor, 'text-halo-color': '#fbfaf6', 'text-halo-width': 2 } });
       updateOverlays(map);
       latest.current.onStatusChange?.('ready');
     };
@@ -141,6 +143,13 @@ export function MapView({ camera, selectedPlace, savedPlaces, routeGeoJSON, fitR
     map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: 60, maxZoom: 15, duration: 0 });
   }, [fitRouteRequest]);
 
+  useEffect(() => {
+    const map = mapRef.current;
+    const places = savedPlaces.filter(p => p.priority !== undefined);
+    if (!map || !fitPlacesRequest || !places.length) return;
+    const bounds = places.reduce((b, p) => [Math.min(b[0], p.coordinates.longitude), Math.min(b[1], p.coordinates.latitude), Math.max(b[2], p.coordinates.longitude), Math.max(b[3], p.coordinates.latitude)], [Infinity, Infinity, -Infinity, -Infinity]);
+    map.fitBounds([[bounds[0], bounds[1]], [bounds[2], bounds[3]]], { padding: 60, maxZoom: 15, duration: 0 });
+  }, [fitPlacesRequest]);
   return <div ref={container} className="map-view" aria-label="2D tourist map" />;
 }
 

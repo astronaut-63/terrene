@@ -12,6 +12,8 @@ from backend.availability import router as availability_router
 from backend.saved_places import router as saved_places_router
 from backend.itineraries import router as itineraries_router
 from backend.routing import routing_configuration
+from backend.city_guide import router as city_guide_router
+app.include_router(city_guide_router)
 
 app.include_router(router)
 app.include_router(routing_router)
