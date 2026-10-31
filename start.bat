@@ -49,7 +49,7 @@ echo [Terrene] Starting FastAPI at http://localhost:3002 ...
 start "Terrene API" /D "%ROOT%" "%ComSpec%" /D /K ".venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 3002"
 
 echo [Terrene] Starting Vite at http://localhost:5173 ...
-start "Terrene Frontend" /D "%ROOT%" "%ComSpec%" /D /K "npm run dev -- --host 127.0.0.1 --port 5173 --strictPort"
+start "Terrene Frontend" /D "%ROOT%" "%ComSpec%" /D /K "call npm.cmd run dev -- --host 127.0.0.1 --port 5173 --strictPort"
 
 echo.
 echo [Terrene] API:      http://localhost:3002/docs
