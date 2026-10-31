@@ -2,6 +2,15 @@
 
 This is an incomplete MVP. Endpoint existence alone is not end-to-end verification.
 
+## Journey enhancement integration — 2026-10-31
+
+Integrated on `feat/astra-journey-enhancements`, based on `backend-audit-baseline` commit `7883dcaf800724999c6dfdb2a27662f0a8374a90`.
+
+- Preserved HeiGIT configuration, string-coordinate normalization, authentication handling, dotenv loading, readiness reporting, saved places, itineraries, guest trips, migrations, and their regression tests.
+- Added bounded checkpoint count/spacing, cumulative distance, elapsed-time metadata, stable checkpoint indexes, typed journey response models, and frontend journey invalidation/checkpoint cleanup.
+- Preserved the baseline weather cache, five-request concurrency limit, partial-failure behavior, and `unavailable` compatibility status. Batched multi-location weather and route reuse remain deferred because they require a larger provider/test-seam redesign.
+- Verification: 44 backend tests passed (43 baseline plus one new checkpoint test), 10 Node tests passed, 29 Vitest tests passed, TypeScript typecheck passed, production build passed, and `git diff --check` passed. Live routing and browser/provider smoke tests remain unverified without a routing credential.
+
 ## Latest continuation
 
 - POI discovery: PARTIALLY_COMPLETED. Bounded Overpass nearby queries, five-point sampled along-route queries, caching, category controls and markers in both maps are implemented. Live verification and clustering remain.

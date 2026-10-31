@@ -107,7 +107,13 @@ export function App() {
       <RoutePlanner selected={selectedPlace} onRoute={setRouteGeoJSON} />
       <Discovery selected={selectedPlace} route={routeGeoJSON} onPlaces={setPoiPlaces} onSelect={selectPlace} />
       <PlaceHours key={selectedPlace?.id} place={selectedPlace} />
-      <JourneyExplorer selected={selectedPlace} onSelect={place=>{setPoiPlaces(current=>[...current.filter(p=>!p.id.startsWith('checkpoint-')),place]);selectPlace(place);}} onRoute={setRouteGeoJSON}/>
+      <JourneyExplorer selected={selectedPlace} onSelect={place=>{setPoiPlaces(current=>[...current.filter(p=>!p.id.startsWith('checkpoint-')),place]);selectPlace(place);}} onRoute={route=>{
+        setRouteGeoJSON(route);
+        if (!route) {
+          setPoiPlaces(current=>current.filter(p=>!p.id.startsWith('checkpoint-')));
+          setSelectedPlace(current=>current?.id.startsWith('checkpoint-') ? null : current);
+        }
+      }}/>
       <ItineraryPlanner selected={selectedPlace} poiPlaces={poiPlaces} onRoute={setRouteGeoJSON}/>
       {globeError && activeMode === '3d' && <p className="message engine-message workspace-message" role="status">{globeError.message}</p>}
     </section>
