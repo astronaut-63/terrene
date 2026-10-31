@@ -113,3 +113,16 @@ it('keeps Journey active and its endpoints independent during contextual and glo
  fireEvent.click(screen.getByRole('button', { name: 'Journey simulation' }));
  expect((screen.getByLabelText('Journey destination') as HTMLInputElement).value).toBe('Mumbai');
 });
+
+it('passes discovered places to map markers and retains selection on marker click', async () => {
+ const poi = { id: 'osm-node-123', name: 'Museum test', coordinates: { latitude: 12.1, longitude: 34.1 } };
+ vi.stubGlobal('fetch', vi.fn((url: string) => Promise.resolve({ ok: true, json: async () => ({ results: url.includes('/nearby') ? [poi] : [], trips: [] }) })));
+ render(<App />); fireEvent.click(screen.getByRole('button', { name: 'Pick test point' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Discover places' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Discover nearby' }));
+ await screen.findByRole('button', { name: 'Museum test Mapped place' });
+ expect(screen.getByTestId('marker-count').textContent).toBe('1');
+ fireEvent.click(screen.getByRole('button', { name: 'Museum test Mapped place' }));
+ expect(screen.getByTestId('flight').textContent).toBe('Museum test');
+ expect(screen.getByTestId('marker-count').textContent).toBe('1');
+});

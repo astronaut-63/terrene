@@ -6,7 +6,7 @@ export interface RouteResult { geometry: RouteGeoJSON; distance_m: number; dista
 export interface Weather { status: string; reason?: string | null; values?: Record<string, number | null> }
 export interface Checkpoint { index?: number; coordinates: GeoCoordinates; arrival: string; progress: number; distance_m: number; elapsed_seconds?: number; weather: Weather }
 export interface JourneyResult { checkpoints: Checkpoint[]; route: RouteResult; limitations: string }
-export interface DiscoveryResult { results: Place[]; status?: 'ok' | 'partial'; attribution: string; coverage?: string; warning?: string | null; failed_samples?: number; successful_samples?: number }
+export interface DiscoveryResult { results: Place[]; status?: 'ok' | 'partial'; cache?: 'live' | 'fresh' | 'stale'; age_seconds?: number; attribution: string; coverage?: string; warning?: string | null; failed_samples?: number; successful_samples?: number }
 export interface HoursResult { status: 'open' | 'closed' | 'unknown' | 'not_provided'; schedule: string | null; timestamp: string; basis: string }
 export interface Trip { id: string; name: string; plan: RoutePlan }
 export interface ItineraryVisit { type?: undefined; id: string; name: string; coordinates: GeoCoordinates; arrival: string; visit_start: string; visit_end: string; visit_minutes: number; opening_hours: HoursResult; travel_from_previous: { distance_m: number; duration_seconds: number } }

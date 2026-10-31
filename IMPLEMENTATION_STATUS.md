@@ -1,3 +1,15 @@
+# Current verification: demo reliability repair (2026-10-31)
+
+This section supersedes the historical status snapshots below. Repairs are **uncommitted** in `terrene-journey-integration` on `codex/frontend-experience`; its starting tree matched remote primary `cacaa0a`. The separate original checkout and local journey commit are preserved. No commit, push, merge, deployment, migration or dependency change was made for this repair.
+
+Discover now has an 18-second operation budget, at most three combined route queries, shared identical requests, bounded fresh/stale caching, honest partial/failure status, cancellation/invalidation and separate marker ownership. Readiness checks database connectivity and expected schema; database errors return safe 503 responses. Solar invalidation was already fixed and its tests pass.
+
+Verification: **69 Python + 10 Node + 77 Vitest tests passed**; typecheck, production build and diff whitespace check passed. Browser smoke opened all major panels and switched 2D/3D while retaining selection. Real Vite proxy health/readiness returned 200; actual database write/read was rolled back. **Live Overpass nearby/corridor requests timed out**; no successful live Discover result is claimed and full live-demo acceptance remains pending. Build retains existing large bundle warnings.
+
+See [demo reliability audit](docs/demo-hardening-audit.md) for root causes, changed files, exact commands, test/live evidence and remaining risks. Older entries below describe earlier checkpoints and are not the current feature inventory.
+
+---
+
 # Current frontend implementation, 31 October 2026
 
 Implementation and automated verification completed on `codex/frontend-experience` from `25c679afa09e67b3f7d230c3e9a8183b560872ac`. This is not a launch-readiness statement. All work remains uncommitted.

@@ -2,7 +2,8 @@ import os
 from sqlalchemy import create_engine, String, JSON, Float
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-engine = create_engine(os.getenv('DATABASE_URL', 'sqlite:///terrene.db'))
+database_url = os.getenv('DATABASE_URL', 'sqlite:///terrene.db')
+engine = create_engine(database_url, pool_pre_ping=True, connect_args={'timeout': 5, 'check_same_thread': False} if database_url.startswith('sqlite:') else {})
 Session = sessionmaker(engine)
 
 class Base(DeclarativeBase):

@@ -15,10 +15,10 @@ class PlacesTests(unittest.IsolatedAsyncioTestCase):
             await nearby(19,72,'invalid',1000)
 
     async def test_corridor_deduplicates(self):
-        with patch('backend.places.nearby',AsyncMock(return_value={'results':[{'id':'a'}]})) as provider:
+        with patch('backend.places._lookup',AsyncMock(return_value={'results':[{'id':'a'}]})) as provider:
             result = await along_route(Corridor(points=[{'latitude':19,'longitude':72},{'latitude':18,'longitude':73}]))
             self.assertEqual(result['results'],[{'id':'a'}])
-            self.assertEqual(provider.await_count,MAX_ROUTE_SAMPLES)
+            self.assertEqual(provider.await_count,3)
             self.assertIn('not an exhaustive corridor search', result['coverage'])
 
     async def test_corridor_uses_distance_sampling_and_keeps_other_samples(self):
@@ -27,9 +27,9 @@ class PlacesTests(unittest.IsolatedAsyncioTestCase):
             nonlocal calls
             calls += 1
             if calls == 2:
-                raise TimeoutError('one sample failed')
+                raise HTTPException(504, 'one batch failed')
             return {'results': [{'id': f'place-{calls}'}, {'id': 'shared'}]}
-        with patch('backend.places.nearby', side_effect=provider):
+        with patch('backend.places._lookup', side_effect=provider):
             result = await along_route(Corridor(points=[{'latitude':19,'longitude':72},{'latitude':19.1,'longitude':72.1}]))
         self.assertLessEqual(calls, MAX_ROUTE_SAMPLES)
         self.assertEqual(len({place['id'] for place in result['results']}), len(result['results']))
@@ -63,7 +63,7 @@ class PlacesTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(HTTPException) as rate:
                 await nearby(19, 75, 'tourism', 1000)
             self.assertEqual(rate.exception.status_code, 429)
-            self.assertEqual(response.post.await_count, 2)
+            self.assertEqual(response.post.await_count, 1)
             cache.clear()
             response.post = AsyncMock(side_effect=[type('Response', (), {'status_code': 503})(), type('Response', (), {'status_code': 503})()])
             with self.assertRaises(HTTPException) as outage:
@@ -92,23 +92,52 @@ class PlacesTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual([place['name'] for place in result['results']], ['Valid'])
 
     async def test_corridor_all_failed_is_unavailable(self):
-        with patch('backend.places.nearby', AsyncMock(side_effect=HTTPException(504, 'Timeout'))):
+        with patch('backend.places._lookup', AsyncMock(side_effect=HTTPException(504, 'Timeout'))):
             with self.assertRaises(HTTPException) as error:
                 await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.01, 'longitude': 72.01}]))
         self.assertEqual(error.exception.status_code, 503)
 
     async def test_corridor_empty_success_is_not_failure(self):
-        with patch('backend.places.nearby', AsyncMock(return_value={'results': []})):
+        with patch('backend.places._lookup', AsyncMock(return_value={'results': []})):
             result = await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.01, 'longitude': 72.01}]))
         self.assertEqual(result['status'], 'ok')
         self.assertEqual(result['failed_samples'], 0)
         self.assertEqual(result['results'], [])
 
     async def test_corridor_partial_failure_is_explicit(self):
-        with patch('backend.places.nearby', AsyncMock(side_effect=[{'results': [{'id': 'kept'}]}, HTTPException(503, 'Unavailable')])):
-            result = await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.001, 'longitude': 72.001}]))
+        with patch('backend.places._lookup', AsyncMock(side_effect=[{'results': [{'id': 'kept'}]}, HTTPException(503, 'Unavailable'), {'results': []}])):
+            result = await along_route(Corridor(points=[{'latitude': 19, 'longitude': 72}, {'latitude': 19.2, 'longitude': 72.2}]))
         self.assertEqual(result['status'], 'partial')
-        self.assertEqual(result['failed_samples'], 1)
-        self.assertEqual(result['successful_samples'], 1)
+        self.assertEqual(result['failed_samples'], 4)
+        self.assertGreater(result['successful_samples'], 0)
         self.assertEqual(result['results'], [{'id': 'kept'}])
         self.assertTrue(result['warning'])
+
+    async def test_stale_cache_and_identical_requests(self):
+        import asyncio
+        cache.clear()
+        async def provider(query):
+            await asyncio.sleep(0.01)
+            return {'elements': [{'type': 'node', 'id': 1, 'lat': 19, 'lon': 72}]}
+        with patch('backend.places._overpass_json', side_effect=provider) as fetch:
+            results = await asyncio.gather(*(nearby(19, 72, 'food,tourism', 1000) for _ in range(3)))
+            self.assertEqual(fetch.await_count, 1)
+            self.assertEqual(len(results[0]['results']), 1)
+        key = next(iter(cache))
+        stamp, result = cache[key]
+        cache[key] = (stamp - 301, result)
+        with patch('backend.places._overpass_json', AsyncMock(side_effect=HTTPException(503, 'down'))):
+            stale = await nearby(19, 72, 'tourism,food', 1000)
+        self.assertEqual(stale['cache'], 'stale')
+        self.assertGreaterEqual(stale['age_seconds'], 301)
+        self.assertEqual(stale['results'], results[0]['results'])
+
+    async def test_overall_deadline(self):
+        import asyncio
+        cache.clear()
+        async def blocked(query):
+            await asyncio.sleep(1)
+        with patch('backend.places._overpass_json', side_effect=blocked), patch('backend.places.DISCOVERY_BUDGET_SECONDS', 0.01):
+            with self.assertRaises(HTTPException) as error:
+                await nearby(19, 72, 'tourism', 1000)
+        self.assertEqual(error.exception.status_code, 504)
