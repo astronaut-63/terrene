@@ -132,3 +132,18 @@ class JourneyTests(unittest.TestCase):
         self.assertEqual(checkpoints[0]['weather']['status'], 'unavailable')
         self.assertEqual(checkpoints[-1]['weather']['status'], 'available')
         self.assertLessEqual(maximum, journeys.WEATHER_CONCURRENCY)
+
+    def test_configurable_checkpoint_count_spacing_and_metadata(self):
+        departure = datetime(2026, 1, 2, 8, 30, tzinfo=timezone(timedelta(hours=5, minutes=30)))
+        result = journeys.checkpoints({'type': 'LineString', 'coordinates': [[0, 0], [1, 0], [1, 1]]}, 100, departure, count=3)
+        self.assertEqual(len(result), 3)
+        self.assertEqual([point['index'] for point in result], [0, 1, 2])
+        self.assertEqual(result[-1]['elapsed_seconds'], 100)
+        self.assertEqual(result[-1]['arrival'], (departure + timedelta(seconds=100)).isoformat())
+        spaced = journeys.checkpoints({'type': 'LineString', 'coordinates': [[0, 0], [1, 0]]}, 100, departure, spacing=100000)
+        self.assertEqual(spaced[0]['distance_m'], 0)
+        self.assertEqual(spaced[-1]['distance_m'], journeys.distance([0, 0], [1, 0]))
+        with self.assertRaises(ValueError):
+            journeys.checkpoints({'type': 'LineString', 'coordinates': [[0, 0], [1, 0]]}, 100, departure, count=26)
+        with self.assertRaises(ValueError):
+            journeys.checkpoints({'type': 'LineString', 'coordinates': [[0, 0], [1, 0]]}, 100, departure, count=3, spacing=100)
