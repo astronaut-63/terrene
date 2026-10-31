@@ -37,6 +37,8 @@ async def generate(body: ItineraryRequest):
     legs = []
     omitted = []
     warnings = []
+    destination_status = 'not_requested'
+    destination_omission = None
 
     for index, stop in enumerate(body.stops, start=1):
         try:
@@ -47,7 +49,8 @@ async def generate(body: ItineraryRequest):
             continue
         duration = float(leg['duration_seconds'])
         arrival = current_time + timedelta(seconds=duration)
-        if elapsed_seconds + duration + stop.visit_minutes * 60 > body.available_minutes * 60:
+        break_seconds = body.break_minutes * 60 if body.break_after_stop == index else 0
+        if elapsed_seconds + duration + stop.visit_minutes * 60 + break_seconds > body.available_minutes * 60:
             omitted.append({'id': stop.id, 'name': stop.name, 'reason': 'time_budget_exceeded'})
             warnings.append(f'{stop.name} was omitted because it exceeds the available time.')
             continue
@@ -73,10 +76,15 @@ async def generate(body: ItineraryRequest):
             if elapsed_seconds + final_duration <= body.available_minutes * 60:
                 legs.append(final_leg)
                 elapsed_seconds += final_duration
+                destination_status = 'included'
             else:
+                destination_status = 'omitted'
+                destination_omission = 'time_budget_exceeded'
                 warnings.append('The final destination was omitted because it exceeds the available time.')
         except HTTPException:
+            destination_status = 'omitted'
+            destination_omission = 'route_unavailable'
             warnings.append('The final destination route was unavailable.')
     if not itinerary or not any(item.get('type') != 'break' for item in itinerary):
         raise HTTPException(503, 'No itinerary stops could be routed.')
-    return {'status': 'partial' if omitted else 'ok', 'origin': body.origin.model_dump(), 'destination': body.destination.model_dump() if body.destination else None, 'departure': body.departure.isoformat(), 'available_minutes': body.available_minutes, 'stops': itinerary, 'legs': legs, 'omitted_stops': omitted, 'warnings': warnings, 'total_duration_minutes': elapsed_seconds / 60, 'limitations': 'Stops are kept in the requested order; travel and visit durations are estimates, and opening-hours data is published information rather than a guarantee of operation.'}
+    return {'status': 'partial' if omitted or destination_status == 'omitted' else 'ok', 'destination_status': destination_status, 'destination_omission': destination_omission, 'origin': body.origin.model_dump(), 'destination': body.destination.model_dump() if body.destination else None, 'departure': body.departure.isoformat(), 'available_minutes': body.available_minutes, 'stops': itinerary, 'legs': legs, 'omitted_stops': omitted, 'warnings': warnings, 'total_duration_minutes': elapsed_seconds / 60, 'limitations': 'Stops are kept in the requested order; travel and visit durations are estimates, and opening-hours data is published information rather than a guarantee of operation.'}

@@ -15,7 +15,8 @@
     "build": "npm run prepare:cesium && tsc -b && vite build",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "start:backend": "node dist-server/server.js"
+    "start:backend": "node dist-server/server.js",
+    "check:launch": "node scripts/check-launch.mjs"
   },
   "dependencies": {
     "@cesium/engine": "22.3.0",

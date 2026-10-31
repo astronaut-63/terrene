@@ -138,12 +138,14 @@ def _sample_route(points):
 
 @router.post('/along-route')
 async def along_route(body: Corridor):
+    if any(category not in CATEGORIES for category in body.categories.split(',')):
+        raise HTTPException(422, 'Choose supported place categories.')
     async def sample(point):
         try:
             async with _provider_limit:
                 return await nearby(point.latitude, point.longitude, body.categories, body.radius)
         except Exception:
-            return {'results': []}
+            return None
 
     responses = await asyncio.gather(*[sample(point) for point in _sample_route(body.points)])
     places = []
@@ -151,4 +153,8 @@ async def along_route(body: Corridor):
         if isinstance(response, dict) and isinstance(response.get('results'), list):
             places.extend(response['results'])
     samples = len(responses)
-    return {'results': _deduplicate(places), 'attribution': '© OpenStreetMap contributors', 'coverage': f'Sampled {samples} route points at up to {ROUTE_SAMPLE_SPACING_M // 1000} km spacing, capped at {MAX_ROUTE_SAMPLES}; not an exhaustive corridor search.'}
+    successful = sum(isinstance(response, dict) and isinstance(response.get('results'), list) for response in responses)
+    failed = samples - successful
+    if not successful:
+        raise HTTPException(503, 'Place discovery is unavailable: every route sample failed. Try again later.')
+    return {'status': 'partial' if failed else 'ok', 'successful_samples': successful, 'failed_samples': failed, 'results': _deduplicate(places), 'attribution': '© OpenStreetMap contributors', 'coverage': f'Sampled {samples} route points at up to {ROUTE_SAMPLE_SPACING_M // 1000} km spacing, capped at {MAX_ROUTE_SAMPLES}; not an exhaustive corridor search.', 'warning': f'{failed} route samples failed; results cover only successful samples.' if failed else None}

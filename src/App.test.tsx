@@ -21,7 +21,7 @@ describe("App", () => {
   it('reports persistence failures and prevents a late saved-place load from erasing a new marker', async () => {
     let resolve!: (value: unknown) => void;
     vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
-      if (url === '/api/v1/places/saved' && !options) return new Promise(r => { resolve = r; });
+      if (url === '/api/v1/places/saved' && !options?.method) return new Promise(r => { resolve = r; });
       return Promise.resolve({ ok: false });
     }));
     render(<App />);
@@ -30,6 +30,7 @@ describe("App", () => {
     expect(await screen.findByText(/Place could not be saved/)).toBeTruthy();
     await act(async () => resolve({ ok: true, json: async () => ({ results: [] }) }));
     expect(screen.getByTestId('marker-count').textContent).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Saved places' }));
     fireEvent.click(screen.getByRole('button', { name: 'Remove Selected point saved place' }));
     expect(await screen.findByText(/Place could not be deleted/)).toBeTruthy();
   });
@@ -44,6 +45,7 @@ describe("App", () => {
     expect(screen.getByTestId('flight').textContent).toBe('Selected point');
     fireEvent.click(screen.getByRole('button', {name: 'Save place'}));
     expect(screen.getByTestId('marker-count').textContent).toBe('1');
+    fireEvent.click(screen.getByRole('button', {name: 'Saved places'}));
     fireEvent.click(screen.getByRole('button', {name: 'Remove Selected point saved place'}));
     expect(screen.getByTestId('marker-count').textContent).toBe('0');
   });
@@ -62,6 +64,7 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Delhi/ }));
     expect(screen.getByText("28.6139°")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save place" }));
+    fireEvent.click(screen.getByRole("button", { name: "Saved places" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove Delhi saved place" }));
     expect(screen.getByText("Saved destinations will appear in both map modes.")).toBeTruthy();
   });
@@ -73,4 +76,16 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Search" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Search provider unavailable");
   });
+});
+
+it('preserves route inputs while switching geographical tools', () => {
+ render(<App />); fireEvent.click(screen.getByRole('button', { name: 'Pick test point' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Route planning' }));
+ fireEvent.click(screen.getByText('Set origin')); fireEvent.click(screen.getByText('Set destination'));
+ fireEvent.change(screen.getByLabelText('Travel mode'), { target: { value: 'walking' } });
+ fireEvent.click(screen.getByRole('button', { name: 'Journey simulation' }));
+ fireEvent.click(screen.getByRole('button', { name: 'Route planning' }));
+ expect((screen.getByLabelText('Travel mode') as HTMLSelectElement).value).toBe('walking');
+ expect((screen.getByRole('button', { name: 'Calculate route' }) as HTMLButtonElement).disabled).toBe(false);
+ expect(screen.getByTestId('flight').textContent).toBe('Selected point');
 });

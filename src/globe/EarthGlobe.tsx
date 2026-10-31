@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   BoundingSphere, Cartesian2, Cartesian3, Cartographic, CesiumTerrainProvider,
-  Color, Credit, EllipsoidTerrainProvider, Entity, HeadingPitchRange, HeightReference,
+  Color, Credit, DistanceDisplayCondition, EllipsoidTerrainProvider, Entity, HeadingPitchRange, HeightReference,
   ImageryLayer, IonImageryProvider, IonResource, LabelStyle, Math as CesiumMath, ScreenSpaceEventHandler,
   ScreenSpaceEventType, TileMapServiceImageryProvider, Viewer, buildModuleUrl,
 } from 'cesium';
@@ -207,7 +207,13 @@ export function EarthGlobe(props: EarthGlobeProps) {
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
-    const plan = markerPlan(props.markers ?? []);
+    const markers = [...(props.markers ?? [])];
+    const selection = props.selectedLocation;
+    if (selection && !markers.some(marker => marker.id === selection.id)) markers.push({ id: selection.id, label: selection.name, coordinates: selection.coordinates });
+    const plan = markerPlan(markers);
+    const palette = getComputedStyle(document.documentElement);
+    const forestColor = Color.fromCssColorString(palette.getPropertyValue('--color-forest').trim() || '#435a4c');
+    const selectedColor = Color.fromCssColorString(palette.getPropertyValue('--color-route').trim() || '#b77e3d');
     if (plan.rejected.length) latest.current.onError?.({ code: 'INVALID_MARKERS', message: 'Invalid coordinates or duplicate marker IDs were skipped (first valid ID wins).' });
     const ids = new Set(plan.accepted.map(marker => `marker:${marker.id}`));
     for (const entity of [...viewer.entities.values]) if (entity.id.startsWith('marker:') && !ids.has(entity.id)) viewer.entities.remove(entity);
@@ -215,13 +221,14 @@ export function EarthGlobe(props: EarthGlobeProps) {
       const id = `marker:${marker.id}`;
       viewer.entities.removeById(id);
       const c = marker.coordinates;
+      const selected = selection?.id === marker.id;
       viewer.entities.add({ id, position: Cartesian3.fromDegrees(c.longitude, c.latitude, c.heightMeters ?? 0),
-        point: { pixelSize: 12, color: Color.CYAN, outlineColor: Color.BLACK, outlineWidth: 2, heightReference: c.heightMeters === undefined ? HeightReference.CLAMP_TO_GROUND : HeightReference.NONE, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-        label: { text: marker.label, font: '14px sans-serif', style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, pixelOffset: new Cartesian2(0, -24), heightReference: c.heightMeters === undefined ? HeightReference.CLAMP_TO_GROUND : HeightReference.NONE },
+        point: { pixelSize: selected ? 11 : 7, color: selected ? selectedColor : forestColor, outlineColor: Color.WHITE, outlineWidth: 2, distanceDisplayCondition: selected ? undefined : new DistanceDisplayCondition(0, 500_000), heightReference: c.heightMeters === undefined ? HeightReference.CLAMP_TO_GROUND : HeightReference.NONE, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        label: { show: selected, text: marker.label, font: '13px sans-serif', style: LabelStyle.FILL_AND_OUTLINE, outlineWidth: 3, pixelOffset: new Cartesian2(0, -24), heightReference: c.heightMeters === undefined ? HeightReference.CLAMP_TO_GROUND : HeightReference.NONE },
       });
     }
     viewer.scene.requestRender();
-  }, [viewer, props.markers]);
+  }, [viewer, props.markers, props.selectedLocation]);
 
   useEffect(() => {
     if (!viewer || viewer.isDestroyed()) return;
@@ -252,7 +259,7 @@ function validCamera(camera: GlobeCamera) {
 function aim(viewer: Viewer, camera: GlobeCamera, animate: boolean) {
   const c = camera.center;
   viewer.camera.flyToBoundingSphere(new BoundingSphere(Cartesian3.fromDegrees(c.longitude, c.latitude, c.heightMeters ?? 0), 0), {
-    duration: animate ? 1.5 : 0,
+    duration: animate && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 1.5 : 0,
     offset: new HeadingPitchRange(CesiumMath.toRadians(camera.headingDegrees ?? 0), CesiumMath.toRadians(camera.pitchDegrees ?? -60), camera.rangeMeters ?? 10_000_000),
   });
 }

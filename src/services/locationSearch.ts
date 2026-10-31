@@ -1,3 +1,4 @@
+import { errorMessage } from './apiClient';
 import type { GeographicLocation, LocationSearchResponse } from '../domain/geo';
 
 export type LocationSearch = (query: string, signal?: AbortSignal) => Promise<GeographicLocation[]>;
@@ -21,12 +22,12 @@ export const searchLocations: LocationSearch = async (query, signal) => {
     response = await fetch(`/api/locations/search?q=${encodeURIComponent(term)}`, { signal, headers: { Accept: 'application/json' } });
   } catch {
     if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
-    throw new Error('Location search backend is unavailable. Start the FastAPI backend on port 3002.');
+    throw new Error('Location search is unavailable. Try again later.');
   }
   let body: unknown;
   try { body = await response.json(); } catch { throw new Error('Location search returned invalid data.'); }
   if (!response.ok) {
-    const message = body && typeof body === 'object' && typeof (body as { error?: unknown }).error === 'string' ? (body as { error: string }).error : 'Location search failed.';
+    const message = errorMessage(body, 'Location search failed.');
     throw new Error(message);
   }
   if (!isLocationSearchResponse(body)) throw new Error('Location search returned an unexpected response structure.');

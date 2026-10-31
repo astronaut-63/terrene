@@ -10,6 +10,8 @@ export interface Place {
   displayName?: string;
   coordinates: GeoCoordinates;
   category?: string;
+  metadata?: Record<string, string>;
+  accessibility?: string;
 }
 
 export interface GeographicLocation extends Place {

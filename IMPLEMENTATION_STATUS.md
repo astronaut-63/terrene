@@ -1,3 +1,18 @@
+# Current frontend implementation, 31 October 2026
+
+Implementation and automated verification completed on `codex/frontend-experience` from `25c679afa09e67b3f7d230c3e9a8183b560872ac`. This is not a launch-readiness statement. All work remains uncommitted.
+
+- Map-first shell, shared selection, preserved feature panels, route ownership and cancellation, trip updates, itinerary editing, honest discovery failures, solar invalidation, warm semantic styling, SVG icons and mobile drawer are implemented.
+- Backend break-budget, final destination, route-sample failure and invalid routing result corrections have regression tests. Existing persistence and migrations remain.
+- Actual results: 53 backend tests, 10 Node tests, 52 Vitest tests, typecheck and build passed. Vite still warns about large map/globe chunks. Browser sizes from 390 to 1920 pixels were checked without page overflow; attribution remains visible.
+- Live browser verification covers map rendering, Nominatim search, point selection, guest persistence/reload, solar, missing hours, nearby POIs, unavailable routing and no-token globe fallback. One Overpass request returned real results; another timed out and showed a failure.
+- Successful live routes, journeys and itineraries still require backend routing credentials. Configured ion resources and complete primary workflow browser acceptance are unverified. Mocked tests do not establish live-provider success.
+- Favicon and legal navigation are present. Privacy/terms are publication drafts. Domain, HTTPS deployment, operator details, retention, legal/provider approval and production workflow verification remain launch blockers. `npm run check:launch` fails for these unresolved gates.
+
+[Full report, files and limitations](docs/FRONTEND_REPORT.md) · [Production arrangement](docs/PRODUCTION.md) · [Provider review](docs/PROVIDER_REVIEW.md)
+
+The remaining text is historical and is superseded by the current report.
+
 # Implementation status
 
 This is an incomplete MVP. Endpoint existence alone is not end-to-end verification.
