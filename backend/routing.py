@@ -1,4 +1,5 @@
 import os
+import math
 from typing import Literal
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -16,6 +17,7 @@ class RouteRequest(BaseModel):
     stops: list[Point] = Field(default_factory=list, max_length=8)
     mode: Literal['driving', 'walking', 'cycling', 'wheelchair', 'transit'] = 'driving'
     maximum_incline: float = Field(default=6, ge=0, le=15)
+    itinerary: dict | None = None
 
 PROFILES = {'driving': 'driving-car', 'walking': 'foot-walking', 'cycling': 'cycling-regular', 'wheelchair': 'wheelchair'}
 DEFAULT_HEIGIT_BASE_URL = 'https://api.heigit.org/openrouteservice'
@@ -36,6 +38,24 @@ def provider_body(request):
         body['options'] = {'avoid_features': ['steps'], 'profile_params': {'restrictions': {'maximum_incline': request.maximum_incline}}}
     return body
 
+def normalize_geometry(geometry):
+    if not isinstance(geometry, dict) or geometry.get('type') != 'LineString' or not isinstance(geometry.get('coordinates'), list) or len(geometry['coordinates']) < 2:
+        raise ValueError('Invalid route geometry')
+    coordinates = []
+    for coordinate in geometry['coordinates']:
+        if isinstance(coordinate, str):
+            parts = coordinate.split()
+            if len(parts) != 2:
+                raise ValueError('Invalid route coordinate')
+            coordinate = parts
+        if not isinstance(coordinate, (list, tuple)) or len(coordinate) < 2:
+            raise ValueError('Invalid route coordinate')
+        longitude, latitude = float(coordinate[0]), float(coordinate[1])
+        if not math.isfinite(longitude) or not math.isfinite(latitude):
+            raise ValueError('Invalid route coordinate')
+        coordinates.append([longitude, latitude])
+    return {'type': 'LineString', 'coordinates': coordinates}
+
 @router.post('/routes')
 async def route(request: RouteRequest):
     if request.mode == 'transit':
@@ -55,9 +75,7 @@ async def route(request: RouteRequest):
         data = response.json()
         feature = data['features'][0]
         summary = feature['properties']['summary']
-        geometry = feature['geometry']
-        if geometry['type'] != 'LineString' or len(geometry['coordinates']) < 2:
-            raise ValueError('Invalid route')
+        geometry = normalize_geometry(feature['geometry'])
         return {'geometry': geometry, 'distance_m': summary['distance'], 'distance_km': summary['distance'] / 1000, 'duration_seconds': summary['duration'], 'bbox': data.get('bbox'), 'instructions': feature['properties'].get('segments', []), 'attribution': 'openrouteservice | © OpenStreetMap contributors', 'accessibility': 'unknown' if request.mode == 'wheelchair' else 'not_assessed', 'limitations': 'Estimated duration is not traffic-aware. Accessibility depends on mapped data and is not guaranteed.'}
     except httpx.TimeoutException:
         raise HTTPException(504, 'Routing provider timed out.')

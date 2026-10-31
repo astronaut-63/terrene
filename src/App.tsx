@@ -6,6 +6,7 @@ import { RoutePlanner } from './RoutePlanner';
 import { Discovery } from './Discovery';
 import { PlaceHours } from './PlaceHours';
 import { JourneyExplorer } from './JourneyExplorer';
+import { ItineraryPlanner } from './ItineraryPlanner';
 import type { GlobeCamera, GlobeLabelsStatus, GlobeMarker, GlobeStatus } from './globe/contracts';
 
 const EarthGlobe = lazy(() => import('./globe/EarthGlobe').then(module => ({ default: module.EarthGlobe })));
@@ -45,6 +46,12 @@ export function App() {
   const [solarError, setSolarError] = useState<string | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
   useEffect(() => () => controllerRef.current?.abort(), []);
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+    void window.fetch('/api/v1/places/saved').then(response => response.ok ? response.json() : null).then(body => {
+      if (body && Array.isArray(body.results)) setSavedPlaces(body.results);
+    }).catch(() => undefined);
+  }, []);
 
   function selectPlace(place: Place) {
     setSelectedPlace(place);
@@ -52,8 +59,17 @@ export function App() {
     setGlobeCamera(camera => ({ ...camera, center: place.coordinates, rangeMeters: 100_000 }));
   }
   function selectCoordinates(coordinates: GeoCoordinates) { selectPlace({ id: 'picked', name: 'Selected point', coordinates }); }
-  function addSavedPlace() { if (selectedPlace) setSavedPlaces(current => current.some(place => place.id === selectedPlace.id) ? current : [...current, selectedPlace]); }
-  function removeSavedPlace(id: string) { setSavedPlaces(current => current.filter(place => place.id !== id)); }
+  function addSavedPlace() {
+    if (!selectedPlace) return;
+    setSavedPlaces(current => current.some(place => place.id === selectedPlace.id) ? current : [...current, selectedPlace]);
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+      void window.fetch('/api/v1/places/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selectedPlace) }).catch(() => undefined);
+    }
+  }
+  function removeSavedPlace(id: string) {
+    setSavedPlaces(current => current.filter(place => place.id !== id));
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') void window.fetch('/api/v1/places/saved/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => undefined);
+  }
   function switchMode(mode: MapMode) {
     if (mode === activeMode) return;
     if (mode === '3d') setGlobeCamera(camera => selectedPlace ? { ...camera, center: selectedPlace.coordinates, rangeMeters: 100_000 } : camera);
@@ -92,6 +108,7 @@ export function App() {
       <Discovery selected={selectedPlace} route={routeGeoJSON} onPlaces={setPoiPlaces} onSelect={selectPlace} />
       <PlaceHours key={selectedPlace?.id} place={selectedPlace} />
       <JourneyExplorer selected={selectedPlace} onSelect={place=>{setPoiPlaces(current=>[...current.filter(p=>!p.id.startsWith('checkpoint-')),place]);selectPlace(place);}} onRoute={setRouteGeoJSON}/>
+      <ItineraryPlanner selected={selectedPlace} poiPlaces={poiPlaces} onRoute={setRouteGeoJSON}/>
       {globeError && activeMode === '3d' && <p className="message engine-message workspace-message" role="status">{globeError.message}</p>}
     </section>
   </main>;

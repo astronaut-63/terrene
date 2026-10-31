@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from backend.main import app
-from backend.routing import RouteRequest, provider_body, provider_url
+from backend.routing import RouteRequest, provider_body, provider_url, normalize_geometry
 
 PAYLOAD = {'origin': {'latitude': 19, 'longitude': 72}, 'destination': {'latitude': 18, 'longitude': 73}}
 
@@ -50,6 +50,10 @@ class RoutingTests(unittest.TestCase):
         self.assertEqual(provider_url(None, 'driving-car'), 'https://api.heigit.org/openrouteservice/v2/directions/driving-car/geojson')
         self.assertEqual(provider_url('https://example.test/custom/', 'foot-walking'), 'https://example.test/custom/v2/directions/foot-walking/geojson')
         self.assertEqual(provider_url('https://example.test/custom/v2/', 'cycling-regular'), 'https://example.test/custom/v2/directions/cycling-regular/geojson')
+
+    def test_provider_string_coordinates_are_normalized_for_consumers(self):
+        geometry = normalize_geometry({'type': 'LineString', 'coordinates': ['72.5 19.5', '73.0 19.0']})
+        self.assertEqual(geometry['coordinates'], [[72.5, 19.5], [73.0, 19.0]])
 
     def test_success_uses_configured_provider_without_leaking_key(self):
         client = TestClient(app)

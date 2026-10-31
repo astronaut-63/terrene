@@ -2,13 +2,16 @@
 
 Backend migration in progress: Vite now proxies all `/api` requests to FastAPI on port 3002. Start `python -m uvicorn backend.main:app --port 3002` after installing `backend/requirements-dev.txt` and running `python -m alembic upgrade head`. Add backend credentials to the repository-root `.env` file and restart FastAPI. The older Node startup instructions below are retained as historical documentation; Node is no longer required by the current proxy. See [implementation status and current setup](IMPLEMENTATION_STATUS.md) for the exact completed scope and outstanding work.
 
-On first setup, copy the example file if `.env` does not exist. The backend loads `.env` from the repository root automatically at startup; operating-system environment variables take precedence. Keep this file local and restart FastAPI after changing it:
+On first setup, copy the example file if `.env` does not exist. The backend loads `.env` from the repository root automatically at startup; operating-system environment variables take precedence. Keep this file local and restart FastAPI after changing it. Apply database migrations before starting the service:
 
 ```powershell
 if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 # Edit .env and set HEIGIT_API_KEY; leave it blank until you have a real key.
+.\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 3002
 ```
+
+Run `alembic upgrade head` once for each deployment/release before directing traffic to new backend workers. It is safe to repeat and preserves existing trips and saved places; Terrene does not delete or recreate the database automatically.
 
 Do not put a real key in source control, `.env.example`, `VITE_*` variables, frontend code, or chat messages. `HEIGIT_BASE_URL` is optional and may point at a compatible self-hosted or explicitly configured service root.
 

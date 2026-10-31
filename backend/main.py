@@ -9,6 +9,8 @@ from backend.trips import router as trips_router
 from backend.journeys import router as journeys_router
 from backend.places import router as places_router
 from backend.availability import router as availability_router
+from backend.saved_places import router as saved_places_router
+from backend.itineraries import router as itineraries_router
 from backend.routing import routing_configuration
 
 app.include_router(router)
@@ -17,6 +19,8 @@ app.include_router(trips_router)
 app.include_router(journeys_router)
 app.include_router(places_router)
 app.include_router(availability_router)
+app.include_router(saved_places_router)
+app.include_router(itineraries_router)
 app.add_api_route('/api/v1/solar', solar, methods=['GET'])
 
 @app.get('/api/v1/health')
