@@ -6,7 +6,8 @@ from collections import OrderedDict
 from datetime import datetime, timezone, timedelta
 import httpx
 from fastapi import APIRouter, HTTPException
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, BaseModel, Field, ConfigDict, model_validator
+from typing import Literal
 from backend.routing import RouteRequest, Point, route
 
 router = APIRouter(prefix='/api/v1')
@@ -78,37 +79,120 @@ async def weather(latitude: float, longitude: float, timestamp: AwareDatetime):
 
 class JourneyRequest(RouteRequest):
     departure: AwareDatetime
+    checkpoint_count: int | None = Field(default=None, ge=2, le=25, strict=True)
+    checkpoint_spacing_m: float | None = Field(default=None, ge=100, le=1_000_000, allow_inf_nan=False)
+
+    @model_validator(mode='after')
+    def checkpoint_options(self):
+        if self.checkpoint_count is not None and self.checkpoint_spacing_m is not None:
+            raise ValueError('Choose checkpoint_count or checkpoint_spacing_m, not both.')
+        return self
 
 def distance(a, b):
     lat1, lat2 = math.radians(a[1]), math.radians(b[1])
     x = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(math.radians(b[0]-a[0])/2)**2
     return 6371000 * 2 * math.asin(min(1, math.sqrt(x)))
 
-def checkpoints(geometry, duration, departure):
+def checkpoints(geometry, duration, departure, count=5, spacing=None):
     coords = geometry['coordinates']
     if geometry.get('type') != 'LineString' or not isinstance(coords, list) or len(coords) < 2:
         raise ValueError('Route geometry must be a LineString with at least two coordinates')
     if any(not isinstance(coord, (list, tuple)) or len(coord) < 2 for coord in coords):
         raise ValueError('Route geometry contains invalid coordinates')
+    if departure.tzinfo is None or departure.utcoffset() is None:
+        raise ValueError('Departure requires a timezone')
+    if not math.isfinite(duration) or duration < 0 or duration > 2_592_000:
+        raise ValueError('Invalid route duration')
     cumulative = [0.0]
     for a, b in zip(coords, coords[1:]):
         cumulative.append(cumulative[-1] + distance(a, b))
+    total = cumulative[-1]
+    if total == 0:
+        if spacing is not None:
+            targets = [0.0]
+        else:
+            if not 2 <= count <= 25:
+                raise ValueError('Checkpoint count must be between 2 and 25')
+            targets = [0.0] * count
+    elif spacing is not None:
+        if not math.isfinite(spacing) or not 100 <= spacing <= 1_000_000:
+            raise ValueError('Checkpoint spacing must be between 100 and 1,000,000 metres')
+        number = math.ceil(total / spacing) + 1
+        if number > 25:
+            raise ValueError('Checkpoint spacing would exceed 25 checkpoints')
+        targets = [i * spacing for i in range(number - 1)] + [total]
+    else:
+        if not 2 <= count <= 25:
+            raise ValueError('Checkpoint count must be between 2 and 25')
+        count = min(count, max(2, int(total) + 1))
+        targets = [total * i / (count - 1) for i in range(count)]
     result = []
-    for i in range(5):
-        progress = i / 4
-        target = cumulative[-1] * progress
+    for i, target in enumerate(targets):
+        progress = target / total if total else 0.0
         j = next((j for j in range(1, len(coords)) if cumulative[j] >= target), len(coords)-1)
         span = cumulative[j] - cumulative[j-1]
         fraction = (target-cumulative[j-1])/span if span else 0
-        lon, lat = [coords[j-1][axis] + fraction*(coords[j][axis]-coords[j-1][axis]) for axis in [0, 1]]
-        result.append({'coordinates': {'latitude': lat, 'longitude': lon}, 'progress': progress, 'distance_m': target, 'arrival': (departure + timedelta(seconds=duration*progress)).isoformat()})
+        if target == total:
+            lon, lat = coords[-1][0], coords[-1][1]
+        else:
+            lon, lat = [coords[j-1][axis] + fraction*(coords[j][axis]-coords[j-1][axis]) for axis in [0, 1]]
+        result.append({'index': i, 'coordinates': {'latitude': lat, 'longitude': lon}, 'progress': progress,
+                       'distance_m': target, 'elapsed_seconds': duration * progress,
+                       'arrival': (departure + timedelta(seconds=duration*progress)).isoformat()})
     return result
 
-@router.post('/journeys/simulate')
+
+class WeatherResult(BaseModel):
+    model_config = ConfigDict(extra='allow')
+    status: str
+    values: dict[str, float | int | None] = Field(default_factory=dict)
+    reason: str | None = None
+    timestamp: AwareDatetime | None = None
+    forecast_timestamp: AwareDatetime | None = None
+
+
+class Checkpoint(BaseModel):
+    index: int
+    coordinates: Point
+    progress: float
+    distance_m: float
+    elapsed_seconds: float
+    arrival: AwareDatetime
+    weather: WeatherResult
+
+
+class RouteGeometry(BaseModel):
+    type: Literal['LineString']
+    coordinates: list[list[float]] = Field(min_length=2)
+
+
+class RouteData(BaseModel):
+    geometry: RouteGeometry
+    distance_m: float
+    duration_seconds: float
+    distance_km: float | None = None
+    bbox: list[float] | None = None
+    instructions: list = Field(default_factory=list)
+    attribution: str | None = None
+    accessibility: str | None = None
+    limitations: str | None = None
+
+
+class JourneyResponse(BaseModel):
+    route: RouteData
+    checkpoints: list[Checkpoint]
+    limitations: str
+    arrival: AwareDatetime | None = None
+    departure: AwareDatetime | None = None
+    duration_seconds: float | None = None
+    timing_method: str = 'duration_proportional_to_geometry_distance'
+
+@router.post('/journeys/simulate', response_model=JourneyResponse)
 async def simulate(body: JourneyRequest):
     routing = await route(body)
     try:
-        points = checkpoints(routing['geometry'], routing['duration_seconds'], body.departure)
+        points = checkpoints(routing['geometry'], routing['duration_seconds'], body.departure,
+                             body.checkpoint_count or 5, body.checkpoint_spacing_m)
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise HTTPException(502, 'Routing provider returned invalid route geometry.') from exc
 
@@ -122,4 +206,9 @@ async def simulate(body: JourneyRequest):
     weather_results = await asyncio.gather(*(checkpoint_weather(point) for point in points))
     for point, forecast in zip(points, weather_results):
         point['weather'] = forecast
-    return {'route': routing, 'checkpoints': points, 'limitations': 'Arrival estimates assume constant progress by distance; no traffic or stop durations included.'}
+    return {'route': routing, 'checkpoints': points,
+            'departure': body.departure.isoformat(),
+            'arrival': points[-1]['arrival'],
+            'duration_seconds': routing['duration_seconds'],
+            'limitations': 'Arrival estimates assume constant progress by distance; no traffic or stop durations included.',
+            'timing_method': 'duration_proportional_to_geometry_distance'}
