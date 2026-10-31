@@ -3,7 +3,7 @@ from datetime import timedelta
 from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, AwareDatetime, model_validator
-from backend.cities import CITIES
+from backend.cities import CITIES, resolve_city_id
 from backend.attractions import attractions
 from backend.routing import Point, RouteRequest, route
 from backend.availability import AvailabilityRequest, availability
@@ -43,7 +43,10 @@ class AttractionData(BaseModel):
     visit_minutes: int
     duration_basis: str
     source: str
+    source_url: str
     attribution: str
+    editorial_priority: int = 99
+    priority_explanation: str = 'Live mapped result; no curated editorial priority'
     rank: int
     score: int
     reasons: list[str]
@@ -55,6 +58,9 @@ def importance(place, interests):
     tags = place['metadata']; score = 10; reasons = ['Mapped visitor attraction']
     for condition, weight, reason in [(bool(tags.get('heritage')), 40, 'Mapped heritage designation'), (bool(tags.get('wikidata')), 20, 'Wikidata reference'), (bool(tags.get('wikipedia')), 20, 'Wikipedia reference'), (place['category'] == 'museum', 15, 'Museum classification'), (place['category'] == 'heritage', 15, 'Historic classification'), (place['category'] in interests, 25, 'Matches your selected interests')]:
         if condition: score += weight; reasons.append(reason)
+    if place.get('editorial_priority', 99) < 99:
+        reasons.append(place.get('priority_explanation', 'Curated editorial priority'))
+        score += max(0, 13 - int(place['editorial_priority']))
     return score, reasons
 
 def ranked(places, interests):
@@ -89,7 +95,8 @@ def supported(): return {'cities': list(CITIES.values())}
 async def get_attractions(city_id: str): return await attractions(city_id)
 
 async def plan(body, places):
-    city = CITIES.get(body.city_id)
+    canonical_id = resolve_city_id(body.city_id)
+    city = CITIES.get(canonical_id) if canonical_id else None
     if not city: raise HTTPException(404, 'City Guide is not available for this city yet.')
     origin = body.origin or Point(**city['center'])
     s, n, w, e = city['bbox']
@@ -103,6 +110,10 @@ async def plan(body, places):
         if len(chosen) >= 8 or attempts >= 12: continue
         if elapsed + item['visit_minutes'] > body.available_minutes:
             item['feasibility'] = 'time_budget_exceeded'; continue
+        if 'Ferry access is required' in item.get('metadata', {}).get('access_notes', ''):
+            item['feasibility'] = 'travel_unavailable'
+            warnings.append(f"{item['name']} requires ferry access; no road travel estimate was claimed.")
+            continue
         attempts += 1
         try:
             leg = await route(RouteRequest(origin=previous, destination=Point(**item['coordinates']), mode=body.mode))

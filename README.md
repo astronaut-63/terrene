@@ -98,6 +98,18 @@ The public OSMF endpoint always disables typeahead. Its
 requires attribution, caching and an application-wide maximum of one request
 per second. The existing backend cache and single-worker throttle remain in use.
 
+City Guide currently has two curated catalogues: Mumbai and Bengaluru (Bangalore),
+with 12 attractions each. The catalogues are the display baseline and remain
+available when Overpass is unavailable; live OpenStreetMap enrichment is optional.
+Coordinates were checked with Nominatim and descriptions link to the cited
+government or institutional tourism sources. Visit durations and editorial
+priorities are Terrene estimates and recommendations, not official timings,
+ratings or visitor counts. City extents are practical attraction-search bounds,
+not administrative boundaries. Elephanta Caves requires ferry access, and the
+guide does not claim a direct road route or precise travel time for it. Vidhana
+Soudha is shown as an architectural landmark without promising interior access.
+Bangalore is accepted as an alias for the canonical `bengaluru` city id.
+
 ```sh
 npm ci
 cp .env.example .env.local
