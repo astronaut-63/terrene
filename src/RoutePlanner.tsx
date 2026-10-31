@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Place, RouteGeoJSON } from './domain/geo';
 
 export function RoutePlanner({ selected, onRoute }: { selected: Place | null; onRoute: (route: RouteGeoJSON) => void }) {
@@ -13,6 +13,7 @@ export function RoutePlanner({ selected, onRoute }: { selected: Place | null; on
     try { const r = await fetch('/api/v1/trips'); if (!r.ok) throw new Error('Trips unavailable. Check backend and migrations.'); setTrips((await r.json()).trips); }
     catch (e) { setMessage(String(e)); }
   }
+  useEffect(() => { if (typeof window !== 'undefined' && typeof window.fetch === 'function') void loadTrips(); }, []);
   async function saveTrip() {
     if (!origin || !destination) return;
     try {

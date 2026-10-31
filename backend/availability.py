@@ -20,6 +20,6 @@ def availability(body: AvailabilityRequest):
             status = str(state)
             if status not in ('open', 'closed', 'unknown'):
                 status = 'unknown'
-        except (ValueError, TypeError, ParserError):
+        except (ValueError, TypeError, ParserError, KeyError, RuntimeError):
             status = 'unknown'
     return {'status':status, 'schedule':body.schedule, 'timestamp':body.timestamp.isoformat(), 'basis':'Published schedule evaluated in the location timezone; exceptional closures may be unrecorded.'}
