@@ -27,6 +27,8 @@ export function App() {
   const [activeMode, setActiveMode] = useState<MapMode>('2d');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [savedPlaces, setSavedPlaces] = useState<Place[]>([]);
+  const [savedError, setSavedError] = useState<string | null>(null);
+  const savedRevision = useRef(0);
   const [poiPlaces, setPoiPlaces] = useState<Place[]>([]);
   const [routeGeoJSON, setRouteGeoJSON] = useState<RouteGeoJSON | null>(null);
   const [mapCamera, setMapCamera] = useState<MapCamera2D>(default2dCamera);
@@ -48,9 +50,15 @@ export function App() {
   useEffect(() => () => controllerRef.current?.abort(), []);
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
-    void window.fetch('/api/v1/places/saved').then(response => response.ok ? response.json() : null).then(body => {
-      if (body && Array.isArray(body.results)) setSavedPlaces(body.results);
-    }).catch(() => undefined);
+    let active = true;
+    const revision = savedRevision.current;
+    void window.fetch('/api/v1/places/saved').then(response => {
+      if (!response.ok) throw new Error('Load failed');
+      return response.json();
+    }).then(body => {
+      if (active && revision === savedRevision.current && Array.isArray(body?.results)) setSavedPlaces(body.results);
+    }).catch(() => { if (active) setSavedError('Saved places could not be loaded. Reload to retry.'); });
+    return () => { active = false; };
   }, []);
 
   function selectPlace(place: Place) {
@@ -61,14 +69,22 @@ export function App() {
   function selectCoordinates(coordinates: GeoCoordinates) { selectPlace({ id: 'picked', name: 'Selected point', coordinates }); }
   function addSavedPlace() {
     if (!selectedPlace) return;
+    savedRevision.current += 1;
+    setSavedError(null);
     setSavedPlaces(current => current.some(place => place.id === selectedPlace.id) ? current : [...current, selectedPlace]);
     if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
-      void window.fetch('/api/v1/places/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selectedPlace) }).catch(() => undefined);
+      void window.fetch('/api/v1/places/saved', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(selectedPlace) }).then(response => {
+        if (!response.ok) throw new Error('Save failed');
+      }).catch(() => setSavedError('Place could not be saved. Its marker is only stored in this session; use Save place to retry.'));
     }
   }
   function removeSavedPlace(id: string) {
+    savedRevision.current += 1;
+    setSavedError(null);
     setSavedPlaces(current => current.filter(place => place.id !== id));
-    if (typeof window !== 'undefined' && typeof window.fetch === 'function') void window.fetch('/api/v1/places/saved/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => undefined);
+    if (typeof window !== 'undefined' && typeof window.fetch === 'function') void window.fetch('/api/v1/places/saved/' + encodeURIComponent(id), { method: 'DELETE' }).then(response => {
+      if (!response.ok) throw new Error('Delete failed');
+    }).catch(() => setSavedError('Place could not be deleted from storage. Reload to restore it and retry deletion.'));
   }
   function switchMode(mode: MapMode) {
     if (mode === activeMode) return;
@@ -105,6 +121,7 @@ export function App() {
       <aside className="marker-panel panel" aria-label="Saved places"><p className="eyebrow">Saved places</p>{savedPlaces.length ? <ul className="markers">{savedPlaces.map(place => <li key={place.id} className={selectedPlace?.id === place.id ? 'selected' : ''}><button onClick={() => selectPlace(place)} aria-pressed={selectedPlace?.id === place.id}>{place.name}<span>{coordinatesText(place.coordinates)}</span></button><button className="icon-button" aria-label={'Remove ' + place.name + ' saved place'} onClick={() => removeSavedPlace(place.id)}>×</button></li>)}</ul> : <p className="hint">Saved destinations will appear in both map modes.</p>}</aside>
       <aside className="solar-panel panel" aria-label="Solar explorer"><p className="eyebrow">Solar explorer</p><p className="hint">Daylight context for the selected destination.</p><label htmlFor="solar-date">Date</label><div className="search-row"><input id="solar-date" type="date" value={solarDate} onChange={event => setSolarDate(event.target.value)} /><button onClick={calculateDaylight} disabled={!selectedPlace || solarState === 'loading'}>{solarState === 'loading' ? 'Calculating…' : 'Calculate daylight'}</button></div>{solarError && <p className="message error" role="alert">{solarError}</p>}{solarResult && <dl className="solar-results"><div><dt>Sunrise</dt><dd>{formatUtc(solarResult.sunrise_utc)}</dd></div><div><dt>Sunset</dt><dd>{formatUtc(solarResult.sunset_utc)}</dd></div><div><dt>Solar noon</dt><dd>{formatUtc(solarResult.solar_noon_utc)}</dd></div><div><dt>Day length</dt><dd>{formatDuration(solarResult.day_length_seconds)}</dd></div></dl>}</aside>
       <RoutePlanner selected={selectedPlace} onRoute={setRouteGeoJSON} />
+      {savedError && <p role="alert">{savedError}</p>}
       <Discovery selected={selectedPlace} route={routeGeoJSON} onPlaces={setPoiPlaces} onSelect={selectPlace} />
       <PlaceHours key={selectedPlace?.id} place={selectedPlace} />
       <JourneyExplorer selected={selectedPlace} onSelect={place=>{setPoiPlaces(current=>[...current.filter(p=>!p.id.startsWith('checkpoint-')),place]);selectPlace(place);}} onRoute={route=>{

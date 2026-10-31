@@ -21,7 +21,7 @@ export const searchLocations: LocationSearch = async (query, signal) => {
     response = await fetch(`/api/locations/search?q=${encodeURIComponent(term)}`, { signal, headers: { Accept: 'application/json' } });
   } catch {
     if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
-    throw new Error('Location search backend is unavailable. Start the Node backend.');
+    throw new Error('Location search backend is unavailable. Start the FastAPI backend on port 3002.');
   }
   let body: unknown;
   try { body = await response.json(); } catch { throw new Error('Location search returned invalid data.'); }

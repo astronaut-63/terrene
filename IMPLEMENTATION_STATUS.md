@@ -11,7 +11,25 @@ Integrated on `feat/astra-journey-enhancements`, based on `backend-audit-baselin
 - Preserved the baseline weather cache, five-request concurrency limit, partial-failure behavior, and `unavailable` compatibility status. Batched multi-location weather and route reuse remain deferred because they require a larger provider/test-seam redesign.
 - Verification: 44 backend tests passed (43 baseline plus one new checkpoint test), 10 Node tests passed, 29 Vitest tests passed, TypeScript typecheck passed, production build passed, and `git diff --check` passed. Live routing and browser/provider smoke tests remain unverified without a routing credential.
 
-## Latest continuation
+## Current source assessment — 2026-10-31
+
+This section supersedes the historical continuation and table below. The current checkout contains the unified FastAPI application, saved-place persistence/migration, itinerary generation and saving, opening-hours integration, and POI route sampling capped at twelve points. They are implemented and covered by mocked-provider/API tests; this does not establish live provider or browser verification.
+
+| Workflow | Current evidence and limitations |
+|---|---|
+| Search, selection and 2D/3D mapping | Shared App state, typed search adapter, MapLibre/Cesium cleanup tests; live imagery/provider checks remain manual |
+| Routes and journeys | HeiGIT normalization, five default checkpoints and API count/spacing options, cache/concurrency and partial-weather tests; credentials required for real routing |
+| Trips and saved places | SQLAlchemy guest-scoped CRUD and migration tests; saved-place frontend updates optimistically with visible persistence failures and a guard against late initial-load overwrites |
+| Itineraries | Ordered stops, visits/breaks, opening-hours checks, budget and partial-routing tests; UI retains generated results and now reports failed persistence |
+| Solar | UTC calculation API tested; changing selection/date can leave an old displayed result until recalculation |
+| Opening hours and POIs | Location-timezone schedule evaluation, Overpass bounds/retries/cache and sampled corridor tests |
+| Outstanding features | Transit, traffic, departure comparison, historical weather and route reuse are not implemented |
+
+Reliability repairs in this continuation: journey input invalidation now aborts the previous request and resets its ownership, preventing a late response from restoring an old route; itinerary persistence checks HTTP errors; README startup now consistently uses `backend.main:app` on 127.0.0.1:3002. MapLibre is already imported as an installed dependency and required no package change. No database or lifecycle changes were made.
+
+Saved-place load/save/delete failures now produce visible retry guidance, and a revision guard prevents an initial load from overwriting local edits. Search recovery text now names the FastAPI backend. Regression verification: 44 backend unittest methods, 10 Node tests, 32 Vitest tests, compileall, typecheck and production build pass with mocked external providers. Browser/live-provider acceptance remains outstanding; no routing key or repository `.env` was present in this worktree. No commit or push was performed.
+
+## Historical continuation (superseded)
 
 - POI discovery: PARTIALLY_COMPLETED. Bounded Overpass nearby queries, five-point sampled along-route queries, caching, category controls and markers in both maps are implemented. Live verification and clustering remain.
 - Personalised modes: PARTIALLY_COMPLETED. Four reusable category presets exist; routing preferences and richer ranking remain.
@@ -21,7 +39,7 @@ Integrated on `feat/astra-journey-enhancements`, based on `backend-audit-baselin
 - Live environment: port 3002 was serving the old solar-only API, with `/api/v1/health` returning 404. Attempts to replace it encountered a persistent port binding even after its reported PID exited. Live browser flows have not been verified in this continuation.
 - Routing credential: HEIGIT_API_KEY was absent from the inspected process environment. No real route success is claimed.
 
-The older table below describes the earlier baseline; the entries above supersede overlapping rows. Tourist itinerary, departure comparison and transit adapter remain outstanding.
+The older table below records an earlier baseline, not the current feature inventory. Use the current source assessment above.
 
 | Feature | Status | Evidence / remaining work |
 |---|---|---|

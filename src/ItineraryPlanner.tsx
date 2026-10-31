@@ -40,7 +40,12 @@ export function ItineraryPlanner({ selected, poiPlaces, onRoute }: { selected: P
       const coordinates = body.legs?.flatMap((leg: any, index: number) => index ? leg.geometry.coordinates.slice(1) : leg.geometry.coordinates) ?? [];
       if (coordinates.length >= 2) onRoute({ type: 'LineString', coordinates });
       if (destination) {
-        void fetch('/api/v1/trips', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Itinerary ' + new Date(departure).toLocaleDateString(), plan: { origin: body.origin, destination: body.destination, mode: 'driving', itinerary: body } }) });
+        try {
+          const saved = await fetch('/api/v1/trips', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Itinerary ' + new Date(departure).toLocaleDateString(), plan: { origin: body.origin, destination: body.destination, mode: 'driving', itinerary: body } }) });
+          if (!saved.ok) throw new Error('Save failed');
+        } catch {
+          setMessage('Itinerary generated, but could not be saved. Generate again to retry saving.');
+        }
       }
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Itinerary unavailable.'); }
     finally { setBusy(false); }

@@ -51,7 +51,7 @@ export const searchLocations: LocationSearch = async (query, signal) => {
     response = await fetch(`/api/locations/search?q=${encodeURIComponent(term)}`, { signal, headers: { Accept: 'application/json' } });
   } catch {
     if (signal?.aborted) throw new DOMException('Search cancelled', 'AbortError');
-    throw new Error('Location search backend is unavailable. Start the Node backend or configure a Cesium ion token.');
+    throw new Error('Location search backend is unavailable. Start the FastAPI backend on port 3002 or configure a Cesium ion token.');
   }
   let body: { results?: GeographicLocation[]; error?: string };
   try { body = await response.json(); } catch { throw new Error('Location search returned invalid data.'); }

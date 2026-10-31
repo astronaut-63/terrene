@@ -1,5 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 
 vi.mock("./services/locationSearch", () => ({ searchLocations: vi.fn() }));
@@ -12,9 +12,27 @@ vi.mock("./map/MapView", () => ({ MapView: (props: any) => <div>
 
 import { searchLocations } from "./services/locationSearch";
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+beforeEach(() => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ results: [], trips: [] }) }));
+});
 
 describe("App", () => {
+  it('reports persistence failures and prevents a late saved-place load from erasing a new marker', async () => {
+    let resolve!: (value: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn((url: string, options?: RequestInit) => {
+      if (url === '/api/v1/places/saved' && !options) return new Promise(r => { resolve = r; });
+      return Promise.resolve({ ok: false });
+    }));
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pick test point' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save place' }));
+    expect(await screen.findByText(/Place could not be saved/)).toBeTruthy();
+    await act(async () => resolve({ ok: true, json: async () => ({ results: [] }) }));
+    expect(screen.getByTestId('marker-count').textContent).toBe('1');
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Selected point saved place' }));
+    expect(await screen.findByText(/Place could not be deleted/)).toBeTruthy();
+  });
   it('connects picking, marker state, flights and truthful engine status', () => {
     render(<App />);
     fireEvent.click(screen.getByRole('button', {name: 'Report map error'}));

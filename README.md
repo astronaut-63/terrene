@@ -23,29 +23,29 @@ For a credential-free demonstration, choose Everest, Grand Canyon or Cape Town f
 
 ## Backend API
 
-The Solar Explorer API is a Python/FastAPI service. Install its dependencies and run it in a separate PowerShell terminal:
+The unified FastAPI application provides search, routing, journeys, trips, saved places, itineraries, opening hours and solar calculations. Run it in a separate PowerShell terminal:
 
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r backend\requirements.txt
-python -m uvicorn backend.solar_api:app --reload --port 3002
+python -m alembic upgrade head
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 3002
 ```
 
-In another terminal, run `npm run dev:backend` to keep the current checkout's geocoder available on port 3001, then run `npm run dev` in a third terminal. `npm run dev` does not start either backend. If port 3001 is already occupied by an older `node dist-server/server.js`, stop that stale process and restart `npm run dev:backend` from this checkout. FastAPI's independent interactive docs are available at `http://localhost:3002/docs`.
+In another terminal run `npm run dev`. Vite forwards all `/api` requests to FastAPI on port 3002. Interactive endpoint schemas are at `http://localhost:3002/docs`. Starting `backend.solar_api:app` alone omits the current feature routers and is obsolete for running the full application.
 
 `GET /api/solar?lat=19.076&lon=72.878&date=2026-11-01` returns UTC sunrise, sunset, solar noon, day length, and solar position. It uses the NOAA solar equations with the standard 90.833° sunrise/sunset zenith; results are approximate (usually within a few minutes), and terrain, weather, and civil-time rules are not modeled. Polar day/night returns null sunrise and sunset rather than invented values.
 
-The small Node backend keeps the existing OpenStreetMap Nominatim search service available (with a descriptive User-Agent, five-second timeout, bounded five-minute cache, and no credentials):
+The Node server and `dev:backend`/`start:backend` scripts are retained for historical compatibility and Node regression tests. They are not part of the current application startup. FastAPI supplies the Nominatim search adapter.
 
 ```sh
-npm run dev:backend
 npm run dev
 ```
 
 Endpoints:
 
-- `GET /api/health` → `{ "ok": true, "service": "terrene-backend" }` (Node service)
+- `GET /api/v1/health` → `{ "ok": true, "service": "terrene-api" }`
 - `GET /api/locations/search?q=Delhi` → `{ "results": [{ "id", "name", "displayName", "coordinates", "metadata" }] }`
 - `GET /api/solar?lat=19.076&lon=72.878&date=2026-11-01` → use the FastAPI service on port 3002 described above.
 
@@ -94,7 +94,7 @@ npm run preview
 
 Application code imports public globe types and `searchLocations` from `src/globe`; it must not use Cesium internals. See [the interface documentation](docs/GLOBE_INTERFACE.md).
 
-Search uses the backend through the public `searchLocations` contract and Vite proxies `/api` to port 3001 during development. The demo supports click-to-place a marker and explicit search submission. Native Cesium controls provide left-drag rotation, wheel/right-drag zoom, and middle-drag tilt. The production demo is also available after `npm run build` and `npm run preview`.
+Search uses the backend through the public `searchLocations` contract and Vite proxies `/api` to FastAPI on port 3002 during development. The demo supports click-to-place a marker and explicit search submission. Native Cesium controls provide left-drag rotation, wheel/right-drag zoom, and middle-drag tilt. The production demo is also available after `npm run build` and `npm run preview`.
 
 Verified locally: `npm test` (5 tests), `npm run typecheck`, and `npm run build`. Browser smoke testing verified no-token imagery, rotation/zoom, coordinate picking and marker selection. Configured ion imagery/terrain/search are not verified without credentials. Cesium currently produces a large (~4.23 MB, ~1.14 MB gzip) JS chunk; this is a build warning, not a failure.
 
