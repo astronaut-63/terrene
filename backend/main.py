@@ -1,4 +1,7 @@
 """Canonical API entry point; legacy solar endpoints remain compatible."""
+# Load repository-local backend configuration before importing routers that read it.
+from backend import config as _config  # noqa: F401
+
 from backend.solar_api import app, solar
 from backend.search import router
 from backend.routing import router as routing_router
@@ -6,6 +9,7 @@ from backend.trips import router as trips_router
 from backend.journeys import router as journeys_router
 from backend.places import router as places_router
 from backend.availability import router as availability_router
+from backend.routing import routing_configuration
 
 app.include_router(router)
 app.include_router(routing_router)
@@ -21,4 +25,4 @@ def health():
 
 @app.get('/api/v1/ready')
 def ready():
-    return {'ok': True, 'service': 'terrene-api'}
+    return {'ok': True, 'service': 'terrene-api', 'routing_provider': routing_configuration()}

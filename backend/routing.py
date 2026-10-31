@@ -18,6 +18,17 @@ class RouteRequest(BaseModel):
     maximum_incline: float = Field(default=6, ge=0, le=15)
 
 PROFILES = {'driving': 'driving-car', 'walking': 'foot-walking', 'cycling': 'cycling-regular', 'wheelchair': 'wheelchair'}
+DEFAULT_HEIGIT_BASE_URL = 'https://api.heigit.org/openrouteservice'
+
+def provider_url(base_url: str | None, profile: str) -> str:
+    """Build the directions URL while accepting a host or service-root override."""
+    base = (base_url or DEFAULT_HEIGIT_BASE_URL).strip().rstrip('/')
+    if base.lower().endswith('/v2'):
+        base = base[:-3].rstrip('/')
+    return f'{base}/v2/directions/{profile}/geojson'
+
+def routing_configuration() -> dict[str, bool]:
+    return {'configured': bool(os.getenv('HEIGIT_API_KEY', '').strip())}
 
 def provider_body(request):
     body = {'coordinates': [[p.longitude, p.latitude] for p in [request.origin, *request.stops, request.destination]]}
@@ -29,15 +40,17 @@ def provider_body(request):
 async def route(request: RouteRequest):
     if request.mode == 'transit':
         raise HTTPException(503, 'Transit routing is unavailable: no timetable provider is configured for this deployment.')
-    key = os.getenv('HEIGIT_API_KEY')
+    key = os.getenv('HEIGIT_API_KEY', '').strip()
     if not key:
-        raise HTTPException(503, 'Routing is not configured. Set HEIGIT_API_KEY on the backend.')
-    base = os.getenv('HEIGIT_BASE_URL', 'https://api.openrouteservice.org').rstrip('/')
+        raise HTTPException(503, 'Routing is not configured. Set HEIGIT_API_KEY in the backend environment.')
+    url = provider_url(os.getenv('HEIGIT_BASE_URL'), PROFILES[request.mode])
     try:
         async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.post(f'{base}/v2/directions/{PROFILES[request.mode]}/geojson', json=provider_body(request), headers={'Authorization': key})
+            response = await client.post(url, json=provider_body(request), headers={'Authorization': key})
         if response.status_code == 429:
             raise HTTPException(429, 'Routing provider rate limit reached.')
+        if response.status_code in (401, 403):
+            raise HTTPException(502, 'Routing provider authentication failed. Check HEIGIT_API_KEY.')
         response.raise_for_status()
         data = response.json()
         feature = data['features'][0]
