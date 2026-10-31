@@ -36,7 +36,7 @@ it('distinguishes failure from empty success and lets retry succeed with custom 
  render(<Discovery selected={place} route={null} onPlaces={vi.fn()} onSelect={vi.fn()} />);
  fireEvent.click(screen.getByLabelText('Food')); expect((screen.getByLabelText('Category preset') as HTMLSelectElement).value).toBe('Custom');
  fireEvent.click(screen.getByText('Discover nearby')); await screen.findByText('Provider unavailable'); expect(screen.queryByText(/No mapped places matched/)).toBeNull();
- fireEvent.click(screen.getByText('Discover nearby')); expect(await screen.findByText(/No mapped places matched/)).toBeTruthy(); expect(fetcher.mock.calls[1][0]).toContain('food');
+ fireEvent.click(screen.getByText('Retry nearby search')); expect(await screen.findByText(/No mapped places matched/)).toBeTruthy(); expect(fetcher.mock.calls[1][0]).toContain('food');
 });
 it('labels stale results with age and blocks duplicate clicks while loading', async () => {
  let resolve!: (value: unknown) => void; const fetcher = vi.fn().mockImplementation(() => new Promise(r => { resolve = r; })); vi.stubGlobal('fetch', fetcher);
